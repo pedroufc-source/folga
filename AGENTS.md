@@ -21,15 +21,16 @@ npm run test:ui   # Playwright: fluxos no Chromium + layout de celular no Chromi
 npm run images    # regenera og.png (preview do link) e apple-touch-icon.png
 npm start         # servidor local em http://127.0.0.1:8781
 GAME_URL=https://pedroufc-source.github.io/folga node tests/ui.cjs   # testa o site publicado
+npm run deploy:teste   # versão de teste em https://teste.folga.pages.dev (Cloudflare; requer npx wrangler login)
 ```
 
-Rode `npm test` e `npm run test:ui` depois de qualquer mudança. Se mexer em layout, **abra as capturas** `output/qa/celular-*.png`, `desktop-*.png` e `imagem-stories.png` e confira visualmente.
+Rode `npm test` e `npm run test:ui` depois de qualquer mudança. **Mudança grande de interface ou de fluxo vai primeiro para o endereço de teste** (`npm run deploy:teste`), para o dono do projeto experimentar no celular; só depois do OK dele entra em `main`. Se mexer em layout, **abra as capturas** `output/qa/celular-*.png`, `desktop-*.png` e `imagem-stories.png` e confira visualmente.
 
 ## Arquivos
 
 - `engine.js`: regras puras (`window.FolgaEngine`): agenda das 6h às 23h, dia de trabalho em blocos (ida, trabalho, almoço, trabalho, volta), listas pra sobreviver e pra viver, catálogo, encaixes, diagnóstico (`verdict`), máximo possível (`maxPlans`), troca de escala (`carryOver`) e texto de compartilhamento. Testado em `tests/engine.test.cjs`.
 - `content.js`: o que tem fonte (`window.FolgaContent`): um relato por motivo de game over, vídeos e a frase sobre Flávio, com links.
-- `app.js`: interface ("como jogar", relógio, abas, agenda em canvas, edição dos blocos de trabalho, avisos da CLT, game over, resultado, imagem 1080×1920 de compartilhamento, `localStorage`). `window.advanceTime(ms)` avança o relógio (testes).
+- `app.js`: interface ("como jogar", relógio, abas, agenda em canvas com visão da semana e, no celular, do dia (`view`, `focusDay`), "horário primeiro" (`slotPick`), edição dos blocos de trabalho, avisos da CLT, game over, resultado, imagem 1080×1920 de compartilhamento, `localStorage`). `window.advanceTime(ms)` avança o relógio (testes).
 - `styles.css`: visual; **todas as cores são tokens em `:root`**. `index.html`: marcação, metatags de preview e o diálogo "Como funciona" com as fontes.
 - `REFERENCIAS.md`: fontes e o que é premissa do modelo. `tools/`: gerador do `og.png`.
 
@@ -52,7 +53,7 @@ Rode `npm test` e `npm run test:ui` depois de qualquer mudança. Se mexer em lay
 6. **Compatibilidade:** Safari 15.4+ (iOS) e Chrome/Firefox recentes. Nada de `ctx.roundRect` (use `arcTo`). Emojis no canvas: só os que não precisam de seletor de variação (U+FE0F) nem junção (U+200D), que o WebKit desalinha; o teste confere o catálogo.
 7. Acessibilidade: emoji além da cor em cada plano, agenda em texto (`#accessible-board`), alternativa por botões a todo arraste, foco visível, `prefers-reduced-motion`.
 8. Salvamento em `localStorage['folga-v7']` (`{version:7, mode, round, clock, introSeen, items, weeks:[{work, plans}|null ×2], nextId}`), validado por `validateSave`. Mudou o formato? Escreva a migração e não mude os `id` do catálogo.
-9. `window.render_game_to_text()`, `window.advanceTime(ms)` e os seletores (`data-task`, `data-tab`, `data-work`, `.slot`, `#howto-start`, `#go-52`, `#go-again`…) são usados pelos testes; ao renomear, atualize `tests/ui.cjs`.
+9. `window.render_game_to_text()`, `window.advanceTime(ms)` e os seletores (`data-task`, `data-tab`, `data-work`, `.slot`, `#howto-start`, `#go-52`, `#go-again`, `.fit`…) e os campos `view`, `focusDay`, `slotPick`, `fits` e `board.cols` do estado são usados pelos testes; ao renomear, atualize `tests/ui.cjs`.
 10. Compartilhamento: a imagem é gerada no navegador (canvas → PNG). `navigator.share` com arquivo precisa ser chamado direto no toque, por isso a imagem é preparada antes, quando o resultado aparece.
 
 ## Git

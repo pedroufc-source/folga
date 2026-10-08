@@ -17,6 +17,8 @@
   let state = fresh(), storageOK = true;
   let selected = null, part = null, tab = 'survive', history = [], statusText = '', statusTone = '';
   let pointer = null, hover = null, pop = null, geo = null, suppressClick = false, workTap = null, lastTick = 0;
+  // Celular: visão da semana ou de um dia (como na agenda do celular); slotPick = horário tocado, à espera de um plano.
+  let view = 'week', focusDay = 0, viewAnim = null, animFrame = 0, slotPick = null;
   const share = { ready: null, file: null, url: '', text: '', size: 0 };
 
   try {
@@ -79,54 +81,99 @@
     while (text.length > 1 && g.measureText(`${text}…`).width > maxW) text = text.slice(0, -1);
     return `${text}…`;
   }
-  // Evento no estilo de agenda: título e horário à esquerda, no alto do bloco.
+  // Evento no estilo de agenda: título e horário no alto do bloco; em bloco baixo, numa linha só.
   function eventText(g, r, title, time, color, s) {
     const pad = 4 * s, size = 10.5 * s;
-    g.fillStyle = color; g.textAlign = 'left'; g.textBaseline = 'top';
-    g.font = `700 ${Math.round(size)}px ${SANS}`;
-    g.fillText(fitText(g, title, r.w - pad * 2), r.x + pad, r.y + pad);
-    if (time && r.h > size * 2.6 + pad) {
-      g.font = `500 ${Math.round(size * .9)}px ${SANS}`;
-      g.fillText(fitText(g, time, r.w - pad * 2), r.x + pad, r.y + pad + size * 1.25);
+    g.fillStyle = color; g.textAlign = 'left';
+    if (r.h >= size * 2.6 + pad) {
+      g.textBaseline = 'top'; g.font = `700 ${Math.round(size)}px ${SANS}`;
+      g.fillText(fitText(g, title, r.w - pad * 2), r.x + pad, r.y + pad);
+      if (time) { g.font = `500 ${Math.round(size * .9)}px ${SANS}`; g.fillText(fitText(g, time, r.w - pad * 2), r.x + pad, r.y + pad + size * 1.25); }
+      return true;
     }
+    const fs = Math.min(size, r.h + 2 * s);
+    if (r.h < 7 * s || fs < 7.5 * s) return false;
+    g.textBaseline = 'middle'; g.font = `700 ${Math.round(fs)}px ${SANS}`;
+    g.fillText(fitText(g, time && r.w > 120 * s ? `${title} · ${time}` : title, r.w - pad * 2), r.x + pad, r.y + r.h / 2 + .5);
+    return true;
+  }
+  // Colunas dos dias: na semana, sete iguais; no dia (celular), uma só ocupa a largura toda.
+  function layoutCols(W, gx, v, f) {
+    const cw = (W - gx) / 7;
+    return Array.from({ length: 7 }, (_, d) => (v !== 'day' ? { x: gx + d * cw, w: cw } : d < f ? { x: gx, w: 0 } : d > f ? { x: W, w: 0 } : { x: gx, w: W - gx }));
   }
   function paintWeek(g, W, H, round, wk, list, o = {}) {
     const C = theme(), id = C.week[round], s = o.scale || 1;
     const gx = o.hours ? (o.gutter || 24) : 0, gy = o.headerH || 18;
     const cw = (W - gx) / 7, rh = (H - gy) / ROWS;
-    const inset = Math.max(1, Math.min(2 * s, cw * .05)), rad = Math.min(4 * s, cw / 6);
-    const off = E.offDays(wk), labels = o.labels && cw >= 70 * s;
-    const box = (day, start, end) => ({ x: gx + day * cw + inset, y: gy + (start - FIRST) * rh + inset, w: cw - 2 * inset, h: (end - start) * rh - 2 * inset });
+    const cols = o.cols || layoutCols(W, gx, 'week'), zoom = o.zoom || 0;
+    const rad = Math.min(4 * s, cw / 6);
+    const off = E.offDays(wk), shown = d => cols[d].w > 1;
+    const labelsAt = d => o.labels && cols[d].w >= 70 * s;
+    const box = (day, start, end) => {
+      const c = cols[day], inset = Math.max(1, Math.min(2 * s, c.w * .05));
+      return { x: c.x + inset, y: gy + (start - FIRST) * rh + inset, w: c.w - 2 * inset, h: (end - start) * rh - 2 * inset };
+    };
     g.save();
     g.fillStyle = C.board; g.fillRect(0, 0, W, H);
-    for (const d of off) { g.fillStyle = id.soft; g.fillRect(gx + d * cw, gy, cw, ROWS * rh); }
+    for (const d of off) { g.fillStyle = id.soft; g.fillRect(cols[d].x, gy, cols[d].w, ROWS * rh); }
     g.strokeStyle = C.grid; g.lineWidth = Math.max(1, s * .8);
     for (let h = 0; h <= ROWS; h++) { const y = Math.round(gy + h * rh) + .5; g.beginPath(); g.moveTo(gx, y); g.lineTo(W, y); g.stroke(); }
-    for (let d = 1; d < 7; d++) { const x = Math.round(gx + d * cw) + .5; g.beginPath(); g.moveTo(x, gy); g.lineTo(x, gy + ROWS * rh); g.stroke(); }
+    for (let d = 1; d < 7; d++) {
+      const x = Math.round(cols[d].x) + .5;
+      if (x > gx + 1 && x < W - 1) { g.beginPath(); g.moveTo(x, gy); g.lineTo(x, gy + ROWS * rh); g.stroke(); }
+    }
     if (o.hours) {
       g.fillStyle = C.hourInk; g.font = `${Math.round(9.5 * s)}px ${SANS}`; g.textAlign = 'right'; g.textBaseline = 'middle';
       const every = rh >= 14 * s ? 1 : 2;
       for (let h = 0; h < ROWS; h += every) g.fillText(`${FIRST + h}h`, gx - 4 * s, gy + (h + .5) * rh);
     }
     // Cabeçalho de agenda: dia da semana e número do dia; o domingo 25 é o dia do segundo turno.
+    // Na visão do dia, o cabeçalho vira a faixa da semana: o dia em foco e quanto cada dia está ocupado.
+    const busy = zoom > .01 ? E.blocks(round, wk, list) : [];
     for (let d = 0; d < 7; d++) {
       const x = gx + d * cw, cx = x + cw / 2, isOff = off.includes(d);
+      const focused = zoom > .01 && d === o.focus;
       if (o.dates) {
+        if (focused) { g.globalAlpha = zoom; g.fillStyle = C.ink; rr(g, x + 2 * s, 1, cw - 4 * s, gy - 2, 6 * s); g.fill(); g.globalAlpha = 1; }
+        const onPill = focused && zoom > .5;
         g.textAlign = 'center'; g.textBaseline = 'middle';
-        g.fillStyle = isOff ? id.main : C.dayInk; g.font = `800 ${Math.round(8.5 * s)}px ${SANS}`;
+        g.fillStyle = onPill ? C.card : isOff ? id.main : C.dayInk; g.font = `800 ${Math.round(8.5 * s)}px ${SANS}`;
         g.fillText(o.letters ? E.SHORT_DAYS[d][0] : E.SHORT_DAYS[d], cx, gy * .27);
-        const r = gy * .25, cy = gy * .66;
+        const r = gy * .25, cy = gy * .62;
         if (d === E.ELECTION_DAY) { g.fillStyle = C.today; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill(); g.fillStyle = C.card; }
-        else g.fillStyle = isOff ? id.main : C.ink;
+        else g.fillStyle = onPill ? C.card : isOff ? id.main : C.ink;
         g.font = `600 ${Math.round(gy * .34)}px ${SANS}`;
         g.fillText(String(E.DATES[d]), cx, cy + .5);
+        if (zoom > .01) {
+          // Barrinha de ocupação: trabalho, planos e o que sobra livre (6h–23h).
+          const bx = x + 5 * s, bw = cw - 10 * s, by = gy - 4 * s, bh = 2.5 * s;
+          g.globalAlpha = zoom;
+          g.fillStyle = focused ? C.muted : C.grid; g.fillRect(bx, by, bw, bh);
+          let at = bx;
+          const mine = busy.filter(b => b.day === d).sort((a, b) => (a.kind === 'plan') - (b.kind === 'plan') || a.start - b.start);
+          for (const b of mine) {
+            const w = (b.end - b.start) / ROWS * bw;
+            g.fillStyle = b.kind === 'plan' ? C.plan[E.itemOf(list, b.uid).color] : focused ? C.card : C.work;
+            g.fillRect(at, by, w, bh); at += w;
+          }
+          if (o.optionDays && o.optionDays.has(d)) { g.fillStyle = C.slot; g.beginPath(); g.arc(x + cw - 6 * s, 5 * s, 2.5 * s, 0, Math.PI * 2); g.fill(); }
+          g.globalAlpha = 1;
+        }
       } else {
         g.textAlign = 'center'; g.textBaseline = 'middle';
-        if (isOff) { g.fillStyle = id.head; rr(g, x + inset, inset, cw - 2 * inset, gy - 2 * inset, rad); g.fill(); g.fillStyle = id.headInk; }
+        if (isOff) { g.fillStyle = id.head; rr(g, x + 2 * s, 2 * s, cw - 4 * s, gy - 4 * s, rad); g.fill(); g.fillStyle = id.headInk; }
         else g.fillStyle = C.dayInk;
         g.font = `800 ${Math.round((o.dayFont || 9.5) * s)}px ${SANS}`;
         g.fillText(o.letters ? E.SHORT_DAYS[d][0] : E.SHORT_DAYS[d], cx, gy / 2 + .5);
       }
+    }
+    if (o.hours && zoom > .5) {
+      // Canto: volta para a semana (grade de sete dias).
+      g.fillStyle = C.dayInk; g.globalAlpha = (zoom - .5) * 2;
+      const u = 3 * s, x0 = gx / 2 - 2 * u, y0 = gy / 2 - u * 1.2;
+      for (let k = 0; k < 6; k++) g.fillRect(x0 + (k % 3) * u * 1.4, y0 + Math.floor(k / 3) * u * 1.4, u, u);
+      g.globalAlpha = 1;
     }
     const lift = (uid, r) => {
       if (!(o.pop && o.pop.uid === uid)) return;
@@ -134,7 +181,8 @@
       g.translate(r.x + r.w / 2, r.y + r.h / 2); g.scale(k, k); g.translate(-(r.x + r.w / 2), -(r.y + r.h / 2));
     };
     for (const w of wk.work) {
-      const hours = E.workHoursOf(round, w.uid), whole = box(w.day, w.start, w.start + E.workSpan(hours, w));
+      if (!shown(w.day)) continue;
+      const hours = E.workHoursOf(round, w.uid), whole = box(w.day, w.start, w.start + E.workSpan(hours, w)), labels = labelsAt(w.day);
       g.save(); lift(w.uid, whole);
       for (const seg of E.workSegments(hours, w)) {
         const r = box(seg.day, seg.start, seg.end);
@@ -146,10 +194,11 @@
           g.restore();
           if (labels) eventText(g, r, 'Trabalho', range(seg.start, seg.end), C.workInk, s);
         } else if (seg.kind === 'commute') {
-          if (labels && r.h > 16 * s) eventText(g, r, `🚌 ${seg.part === 'tin' ? 'Ida' : 'Volta'}`, null, C.commuteInk, s);
-          else emojiAt(g, '🚌', r.x + r.w / 2, r.y + r.h / 2, Math.min(r.h * .72, r.w * .5, 15 * s));
-        } else if (labels && r.h > 12 * s) {
-          eventText(g, r, 'Almoço', null, C.lunchInk, s);
+          if (!(labels && eventText(g, r, `🚌 ${seg.part === 'tin' ? 'Ida' : 'Volta'}`, range(seg.start, seg.end), C.commuteInk, s))) {
+            emojiAt(g, '🚌', r.x + r.w / 2, r.y + r.h / 2, Math.min(r.h * .72, r.w * .5, 15 * s));
+          }
+        } else if (labels) {
+          eventText(g, r, 'Almoço', range(seg.start, seg.end), C.lunchInk, s);
         }
         if (o.selected === w.uid && o.part && (seg.part === o.part || (o.part === seg.kind && seg.kind !== 'commute'))) {
           g.lineWidth = 2.5 * s; g.strokeStyle = C.yellow; rr(g, r.x, r.y, r.w, r.h, rad); g.stroke();
@@ -165,24 +214,32 @@
     }
     for (const p of wk.plans) {
       const it = E.itemOf(list, p.uid);
-      if (!it) continue;
+      if (!it || !shown(p.day)) continue;
       const r = box(p.day, p.start, p.start + it.hours);
       g.save(); lift(p.uid, r);
       g.fillStyle = C.plan[it.color]; rr(g, r.x, r.y, r.w, r.h, rad); g.fill();
       if (it.kind === 'survive') { g.fillStyle = C.ink; g.globalAlpha = .55; g.fillRect(r.x, r.y, Math.max(2, 3 * s), r.h); g.globalAlpha = 1; }
       if (o.selected === p.uid) { g.lineWidth = 2.5 * s; g.strokeStyle = C.ink; rr(g, r.x, r.y, r.w, r.h, rad); g.stroke(); }
-      if (labels) eventText(g, r, `${it.emoji} ${it.short}`, range(p.start, p.start + it.hours), C.planInk, s);
-      else emojiAt(g, it.emoji, r.x + r.w / 2, r.y + r.h / 2, Math.min(r.h * .6, r.w * .6, (o.emoji || 20) * s));
+      const title = `${it.emoji} ${cols[p.day].w >= 160 * s ? it.name : it.short}`;
+      if (!(labelsAt(p.day) && eventText(g, r, title, range(p.start, p.start + it.hours), C.planInk, s))) {
+        emojiAt(g, it.emoji, r.x + r.w / 2, r.y + r.h / 2, Math.min(r.h * .6, r.w * .6, (o.emoji || 20) * s));
+      }
       g.restore();
     }
     if (o.region) {
       for (const seg of o.region) {
+        if (!shown(seg.day)) continue;
         const r = box(seg.day, seg.start, seg.end);
         g.fillStyle = C.slotFill; rr(g, r.x, r.y, r.w, r.h, rad); g.fill();
         g.setLineDash([4 * s, 3 * s]); g.strokeStyle = C.slot; g.lineWidth = 1.6 * s; g.stroke(); g.setLineDash([]);
       }
     }
-    if (o.preview) {
+    if (o.draft && shown(o.draft.day)) {
+      // Horário tocado: o espaço onde o próximo plano vai entrar.
+      const r = box(o.draft.day, o.draft.hour, o.draft.hour + 1);
+      g.fillStyle = C.slot; g.globalAlpha = .45; rr(g, r.x, r.y, r.w, r.h, rad); g.fill(); g.globalAlpha = 1;
+    }
+    if (o.preview && shown(o.preview.day)) {
       const pv = o.preview, r = box(pv.day, pv.start, pv.end);
       g.globalAlpha = .88;
       g.fillStyle = !pv.ok ? C.badFill : E.isWork(pv.uid) ? C.work : C.plan[E.itemOf(list, pv.uid).color];
@@ -191,7 +248,7 @@
       emojiAt(g, E.isWork(pv.uid) ? '💼' : E.itemOf(list, pv.uid).emoji, r.x + r.w / 2, r.y + r.h / 2, Math.min(r.h * .5, r.w * .6, 20 * s));
     }
     g.restore();
-    return { gx, gy, cw, rh };
+    return { gx, gy, cw, rh, cols, zoom };
   }
   function fitCanvas(c) {
     const rect = c.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 3);
@@ -220,21 +277,70 @@
     const start = Math.min(Math.max(Math.round(pt.hour + .5 - span / 2), FIRST), LAST - span);
     return { uid, day: pt.day, start, end: start + span, ok: false };
   }
+  const freeRunAt = (day, hour) => E.freeRuns(state.round, week(), items()).find(r => r.day === day && hour >= r.start && hour < r.end);
   function drawBoard() {
     if (state.mode === 'results') return;
     const { g, W, H } = fitCanvas(board);
     if (W < 20 || H < 20) return;
-    const big = W >= 520;
+    if (view === 'day' && isWide()) { view = 'week'; viewAnim = null; }
+    const big = W >= 520, gx = big ? 36 : 24;
     const dragId = pointer && pointer.moved ? pointer.id : null, focusId = dragId || selected;
     let popK = null;
     if (pop) {
       const p = Math.min(1, (performance.now() - pop.t0) / 240);
       popK = { uid: pop.uid, k: .72 + .28 * (1 - Math.pow(1 - p, 3)) + Math.sin(p * Math.PI) * .08 };
     }
+    let cols = layoutCols(W, gx, view, focusDay), zoom = view === 'day' ? 1 : 0;
+    if (viewAnim) {
+      // Troca de visão: as colunas deslizam da posição antiga para a nova.
+      const p = Math.min(1, (performance.now() - viewAnim.t0) / 260), e = 1 - Math.pow(1 - p, 3);
+      cols = cols.map((c, d) => ({ x: viewAnim.cols[d].x + (c.x - viewAnim.cols[d].x) * e, w: viewAnim.cols[d].w + (c.w - viewAnim.cols[d].w) * e }));
+      zoom = viewAnim.zoom + (zoom - viewAnim.zoom) * e;
+      if (p < 1) { if (!animFrame) animFrame = requestAnimationFrame(() => { animFrame = 0; drawBoard(); }); } else viewAnim = null;
+    }
+    const region = focusId ? regionFor(focusId) : slotPick ? [freeRunAt(slotPick.day, slotPick.hour)].filter(Boolean) : null;
     geo = paintWeek(g, W, H, state.round, week(), items(), {
-      hours: true, gutter: big ? 36 : 24, headerH: big ? 40 : 30, labels: big, scale: big ? 1.05 : 1, emoji: big ? 22 : 18, dates: true,
-      selected, part, region: focusId ? regionFor(focusId) : null,
+      hours: true, gutter: gx, headerH: big ? 40 : 30, labels: true, scale: big ? 1.05 : 1, emoji: big ? 22 : 18, dates: true,
+      cols, zoom, focus: focusDay, optionDays: focusId && region ? new Set(region.map(r => r.day)) : null,
+      selected, part, region, draft: slotPick,
       preview: focusId && hover ? previewFor(focusId, hover) : null, pop: popK });
+  }
+  const dayFree = d => E.freeRuns(state.round, week(), items()).filter(r => r.day === d).reduce((n, r) => n + r.end - r.start, 0);
+  function setView(v, d = focusDay) {
+    if (isWide()) v = 'week';
+    if (v === view && d === focusDay) return;
+    if (!reduceMotion && geo) viewAnim = { cols: geo.cols.map(c => ({ ...c })), zoom: geo.zoom, t0: performance.now() };
+    const entering = v === 'day' && view === 'week';
+    view = v; focusDay = d; slotPick = null; hover = null;
+    if (v === 'day') {
+      const n = dayFree(d);
+      say(`${E.DAYS[d]}, ${E.DATES[d]}/10: ${n ? `${n}h livre${n > 1 ? 's' : ''}` : 'nenhuma hora livre'}.${entering ? ` Deslize para trocar de dia; toque em ${E.SHORT_DAYS[d]} para ver a semana.` : ''}`);
+    } else say('A semana inteira. Toque num dia para ver de perto.');
+    renderGame();
+  }
+  function headerTap(hp) {
+    if (isWide()) return;
+    if (hp.corner) { if (view === 'day') setView('week'); return; }
+    if (view === 'week' || hp.day !== focusDay) setView('day', hp.day);
+    else setView('week');
+  }
+  // O que cabe a partir do horário tocado: primeiro o básico; a lista pra viver só depois dele.
+  function fitsAt(day, hour) {
+    const out = [];
+    for (const it of [...survivalItems(), ...(liveLocked() ? [] : liveItems())]) {
+      const uid = E.nextInstance(week(), it);
+      if (!uid) continue;
+      const start = E.resolveStart(state.round, week(), items(), uid, day, hour);
+      if (start !== null) out.push({ uid, it, start });
+    }
+    return out;
+  }
+  function openSlot(pt) {
+    selected = null; part = null; slotPick = { day: pt.day, hour: pt.hour };
+    const n = fitsAt(pt.day, pt.hour).length;
+    const run = freeRunAt(pt.day, pt.hour), free = run ? ` (livre ${range(run.start, run.end)})` : '';
+    say(n ? `${E.DAYS[pt.day]}, ${pt.hour}h${free}: escolha o que entra aqui.` : `${E.DAYS[pt.day]}, ${pt.hour}h${free}: não cabe nada que falta na lista.`, n ? '' : 'error');
+    renderGame();
   }
   function animatePop() {
     drawBoard();
@@ -244,9 +350,17 @@
   function boardPoint(clientX, clientY) {
     if (!geo) return null;
     const rect = board.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top;
-    const day = Math.floor((x - geo.gx) / geo.cw), hour = FIRST + Math.floor((y - geo.gy) / geo.rh);
-    if (x > rect.width || day < 0 || day > 6 || hour < FIRST || hour >= LAST) return null;
+    const day = geo.cols.findIndex(c => c.w > 1 && x >= c.x && x < c.x + c.w), hour = FIRST + Math.floor((y - geo.gy) / geo.rh);
+    if (x > rect.width || day < 0 || hour < FIRST || hour >= LAST) return null;
     return { day, hour };
+  }
+  // Toque no cabeçalho: um dia da faixa da semana ou o canto (volta para a semana).
+  function headerPoint(clientX, clientY) {
+    if (!geo) return null;
+    const rect = board.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top;
+    if (y < 0 || y >= geo.gy || x < 0 || x > rect.width) return null;
+    if (x < geo.gx) return { corner: true };
+    return { day: Math.min(6, Math.max(0, Math.floor((x - geo.gx) / geo.cw))) };
   }
   const blockAt = pt => E.blocks(state.round, week(), items()).find(b => b.day === pt.day && pt.hour >= b.start && pt.hour < b.end);
 
@@ -292,7 +406,7 @@
     work: 'Trabalho: toque num espaço livre para mudar o horário ou o dia. Hora extra até 2h.'
   };
   function select(uid, fromKeyboard = false, newPart = null) {
-    selected = uid; part = E.isWork(uid) ? (newPart || 'work') : null; workTap = null;
+    selected = uid; part = E.isWork(uid) ? (newPart || 'work') : null; workTap = null; slotPick = null;
     if (E.isWork(uid)) say(PARTS[part]);
     else {
       const it = E.itemOf(items(), uid), why = E.whyNoRoom(state.round, week(), items(), uid);
@@ -304,7 +418,7 @@
     if (fromKeyboard) { const p = $('picker'); (p.querySelector('.slot') || p.querySelector('.tool') || p.querySelector('.picker-close'))?.focus(); }
   }
   function deselect(message = 'Escolha outra coisa quando quiser.') {
-    const uid = selected; selected = null; part = null; say(message); renderGame();
+    const uid = selected; selected = null; part = null; slotPick = null; say(message); renderGame();
     return uid;
   }
   function remember() { history.push(JSON.parse(JSON.stringify(week()))); if (history.length > 60) history.shift(); }
@@ -327,7 +441,7 @@
     if (!result.ok) { say(result.reason, 'error'); drawBoard(); return false; }
     remember();
     state.weeks[state.round] = result.week;
-    selected = null; part = null; hover = null;
+    selected = null; part = null; hover = null; slotPick = null;
     const span = spanOf(uid), s = st();
     if (E.isWork(uid)) say(`Trabalho: ${E.DAYS[day].toLowerCase()}, ${range(start, start + span)}, com transporte.`, 'good');
     else {
@@ -392,7 +506,7 @@
   }
   function undo() {
     if (!history.length) return;
-    state.weeks[state.round] = history.pop(); selected = null; part = null;
+    state.weeks[state.round] = history.pop(); selected = null; part = null; slotPick = null;
     say('Desfeito.'); save(); renderGame();
   }
   function partAt(pt, uid) {
@@ -420,7 +534,7 @@
       say(E.whyNotHere(state.round, week(), items(), selected, pt.day, pt.hour), 'error'); drawBoard(); return;
     }
     if (hit) { select(hit.uid, false, E.isWork(hit.uid) ? partAt(pt, hit.uid) : null); return; }
-    say(liveLocked() ? `Escolha algo da lista "pra sobreviver" e toque num espaço livre. ${missingText()}` : 'Escolha um plano na lista e toque num espaço livre.');
+    openSlot(pt);
   }
   function drop(uid, pt) {
     hover = null;
@@ -446,7 +560,7 @@
   // ---------- Game over da 6×1 ----------
   function gameOver(why) {
     if (state.mode !== 'playing' || state.round !== 0) return;
-    state.mode = 'gameover'; selected = null; part = null; pointer = null; hover = null;
+    state.mode = 'gameover'; selected = null; part = null; pointer = null; hover = null; slotPick = null;
     save(); renderGame(); showGameOver(why);
   }
   const extLink = (url, text) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}<span aria-hidden="true"> ↗</span></a>`;
@@ -482,7 +596,7 @@
   }
   function againSixOne() {
     closeDialog($('gameover-dialog'));
-    state.mode = 'playing'; state.clock = E.CLOCK_SECONDS; state.weeks = [E.newWeek(0), null]; history = []; tab = 'survive';
+    state.mode = 'playing'; state.clock = E.CLOCK_SECONDS; state.weeks = [E.newWeek(0), null]; history = []; tab = 'survive'; view = 'week'; viewAnim = null;
     lastTick = performance.now();
     say('Mais uma semana na 6×1. Segunda-feira começa tudo de novo.', 'error', false);
     save(); render(); focusHeading();
@@ -490,17 +604,17 @@
   function toFiveTwo() {
     closeDialog($('gameover-dialog'));
     const carried = E.carryOver(state.weeks[0], 1, items());
-    state.round = 1; state.weeks[1] = carried.week; state.mode = 'playing'; selected = null; part = null; history = []; share.ready = null;
+    state.round = 1; state.weeks[1] = carried.week; state.mode = 'playing'; selected = null; part = null; history = []; share.ready = null; view = 'week'; viewAnim = null;
     tab = st().survivalDone ? 'live' : 'survive';
     say(`Escala 5×2: cinco dias de trabalho, um dia inteiro a mais pra você e sem relógio. Sobram ${st().unplanned}h livres.`);
     save(); render(); focusHeading();
   }
   const firstHint = () => (isWide()
     ? 'Comece pelo que é pra sobreviver: escolha na lista (ou arraste) e solte num espaço livre.'
-    : 'Comece pelo que é pra sobreviver: toque na lista e depois num espaço livre.');
+    : 'Comece pelo que é pra sobreviver: toque na lista ou num horário livre.');
   function restart() {
     closeDialog($('restart-dialog'));
-    state = fresh(); state.introSeen = true; selected = null; part = null; history = []; statusText = ''; share.ready = null; tab = 'survive';
+    state = fresh(); state.introSeen = true; selected = null; part = null; history = []; statusText = ''; share.ready = null; tab = 'survive'; view = 'week'; viewAnim = null; slotPick = null;
     lastTick = performance.now(); save(); render(); focusHeading();
   }
   function showHowto() {
@@ -553,8 +667,9 @@
   }
   function renderPicker() {
     const picker = $('picker');
-    $('dock').dataset.mode = selected ? 'pick' : 'tray';
-    picker.hidden = !selected;
+    $('dock').dataset.mode = selected || slotPick ? 'pick' : 'tray';
+    picker.hidden = !(selected || slotPick);
+    if (!selected && slotPick) { renderSlotPick(picker); return; }
     if (!selected) { picker.innerHTML = ''; return; }
     const work = E.isWork(selected), it = work ? null : E.itemOf(items(), selected);
     const span = spanOf(selected), cur = placedOf(selected);
@@ -590,6 +705,16 @@
       (!slots.length && !cur ? '<p class="no-room">Libere espaço: toque em algo encaixado para mover ou tirar.</p>' : '') +
       (!work && it.kind === 'live' && state.round === 0 ? `<button class="remove-button ghost" data-delete="${it.uid}">Excluir da lista</button>` : '') +
       '</div>';
+  }
+  // Mesma altura da lista, para a agenda não pular quando a folha abre; o dia e a hora ficam no status.
+  function renderSlotPick(picker) {
+    const { day, hour } = slotPick, fits = fitsAt(day, hour), run = freeRunAt(day, hour);
+    picker.style.setProperty('--c', 'var(--slot)');
+    picker.innerHTML = `<div class="slots fits" role="group" aria-label="O que cabe em ${E.DAYS[day].toLowerCase()}, ${hour}h${run ? `, livre das ${run.start} às ${run.end}` : ''}">` +
+      '<button class="picker-close fit-close" data-close-picker aria-label="Fechar">×</button>' +
+      fits.map(f => `<button class="fit${f.it.kind === 'survive' ? ' basic' : ''}" data-fit="${f.uid}" data-day="${day}" data-start="${f.start}" style="--c: var(--plan-${f.it.color})" aria-label="${f.it.name}, das ${f.start} às ${f.start + f.it.hours} horas">` +
+        `<span class="emoji" aria-hidden="true">${f.it.emoji}</span><span class="name">${f.it.short}</span><small>${range(f.start, f.start + f.it.hours)}</small></button>`).join('') +
+      (fits.length ? '' : `<p class="no-room">Nada que falta cabe aqui. Toque em algo encaixado para mover ou tirar.</p>`) + '</div>';
   }
   function renderAccessible() {
     const all = E.blocks(state.round, week(), items()).map(b => ({ ...b, text: b.kind === 'plan' ? `${E.itemOf(items(), b.uid).name} (plano)` : { work: 'trabalho', commute: 'transporte', lunch: 'almoço' }[b.kind] }));
@@ -790,7 +915,7 @@
   $('gameover-dialog').addEventListener('cancel', e => e.preventDefault());
   document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
     if (b.dataset.tab === 'live' && liveLocked()) { say(`Primeiro, o que é pra sobreviver. ${missingText()}`, 'error'); return; }
-    tab = b.dataset.tab; selected = null; part = null; renderGame();
+    tab = b.dataset.tab; selected = null; part = null; slotPick = null; renderGame();
   }));
 
   $('tray').addEventListener('click', e => {
@@ -803,6 +928,7 @@
   });
   $('picker').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.fit) { place(b.dataset.fit, Number(b.dataset.day), Number(b.dataset.start)); return; }
     if (b.dataset.start !== undefined) {
       const uid = selected;
       if (place(uid, Number(b.dataset.day), Number(b.dataset.start)) && e.detail === 0) {
@@ -850,9 +976,10 @@
   });
   board.addEventListener('pointerdown', e => {
     if (e.button > 0 || state.mode !== 'playing' || document.querySelector('dialog[open]')) return;
-    const pt = boardPoint(e.clientX, e.clientY), hit = pt && blockAt(pt);
-    beginPointer(e, 'board', hit ? hit.uid : null);
-    pointer.pt = pt;
+    const hp = headerPoint(e.clientX, e.clientY);
+    const pt = hp ? null : boardPoint(e.clientX, e.clientY), hit = pt && blockAt(pt);
+    beginPointer(e, hp ? 'header' : 'board', hit ? hit.uid : null);
+    pointer.pt = pt; pointer.hp = hp;
     try { board.setPointerCapture(e.pointerId); } catch { /* Sem captura, segue com eventos do documento. */ }
   });
   document.addEventListener('pointermove', e => {
@@ -860,10 +987,12 @@
       if (e.target === board && e.pointerType === 'mouse' && selected) { hover = boardPoint(e.clientX, e.clientY); drawBoard(); }
       return;
     }
-    if (e.pointerId !== pointer.pointerId) return;
+    if (e.pointerId !== pointer.pointerId || pointer.swipe) return;
     if (!pointer.moved) {
       const dx = e.clientX - pointer.x0, dy = e.clientY - pointer.y0;
       if (!pointer.id || Math.hypot(dx, dy) < 8) return;
+      // Na visão do dia, arrastar para o lado troca o dia; para cima ou para baixo, muda o horário do bloco.
+      if (pointer.source === 'board' && view === 'day' && Math.abs(dx) > Math.abs(dy)) { pointer.swipe = true; return; }
       // Na lista, arrastar para o lado rola a lista; para cima, leva o plano à agenda.
       if (pointer.source === 'chip' && pointer.touch && Math.abs(dx) > Math.abs(dy)) { pointer = null; return; }
       pointer.moved = true;
@@ -885,13 +1014,19 @@
     pointer = null;
     $('drag-ghost').hidden = true;
     if (state.mode !== 'playing') return;
+    const dx = e.clientX - p.x0, dy = e.clientY - p.y0;
     if (p.moved) {
       if (p.source === 'chip') suppressClick = true;
       setTimeout(() => { suppressClick = false; }, 0);
       drop(p.id, boardPoint(e.clientX, e.clientY - (p.touch ? 27 : 0)));
-    } else if (p.source === 'board') tapBoard(p.pt);
+    } else if (p.source !== 'chip' && view === 'day' && Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      setView('day', Math.min(6, Math.max(0, focusDay + (dx < 0 ? 1 : -1))));
+    } else if (p.source === 'header') headerTap(p.hp);
+    else if (p.source === 'board') tapBoard(p.pt);
   });
   document.addEventListener('pointercancel', () => { if (pointer && pointer.moved) renderGame(); pointer = null; hover = null; $('drag-ghost').hidden = true; });
+  // Toque na agenda: sem o clique "fantasma" que o celular dispara depois, que podia cair num botão que mudou de lugar.
+  board.addEventListener('touchend', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
   board.addEventListener('pointerleave', () => { if (!pointer && hover) { hover = null; drawBoard(); } });
 
   $('undo-button').addEventListener('click', undo);
@@ -917,7 +1052,8 @@
   });
   document.addEventListener('keydown', e => {
     if (state.mode !== 'playing' || document.querySelector('dialog[open]')) return;
-    if (e.key === 'Escape' && selected) deselect();
+    if (e.key === 'Escape' && (selected || slotPick)) deselect();
+    else if (e.key === 'Escape' && view === 'day') setView('week');
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !/INPUT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); undo(); }
   });
   if (typeof ResizeObserver === 'function') new ResizeObserver(() => drawBoard()).observe($('board-wrap'));
@@ -937,7 +1073,7 @@
     const rect = board.getBoundingClientRect(), wk = week();
     return JSON.stringify({
       mode: state.mode, round: state.round, introSeen: state.introSeen, clock: Math.round(state.clock * 10) / 10, scale: scaleOf(state.round),
-      tab, selected, part, dialog: document.querySelector('dialog[open]')?.id || null, status: statusText, statusTone,
+      tab, selected, part, view, focusDay, slotPick, fits: slotPick ? fitsAt(slotPick.day, slotPick.hour).map(f => f.uid) : [], dialog: document.querySelector('dialog[open]')?.id || null, status: statusText, statusTone,
       storageAvailable: storageOK, historyLength: history.length,
       items: items().map(it => ({ uid: it.uid, name: it.name, hours: it.hours, times: it.times, kind: it.kind, custom: !it.ref })),
       week: wk, weeks: state.weeks, stats: [0, 1].map(r => (state.weeks[r] ? E.stats(r, state.weeks[r], items()) : null)),

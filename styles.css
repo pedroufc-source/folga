@@ -665,3 +665,15 @@ body[data-screen="game"] dialog .primary { background: var(--accent); color: var
   .go-tired { font-size: 24px; }
   .go-relato blockquote { font-size: 15px; }
 }
+/* Horário primeiro: o que cabe no horário tocado. */
+.fit { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: calc(var(--chip-h) - 4px); padding: 0 12px 0 9px; border-radius: 8px; border: 2px solid var(--c); border-left-width: 6px; background: var(--card); color: var(--ink); font-size: 14px; font-weight: 800; white-space: nowrap; }
+.fit .emoji { font-size: 17px; }
+.fit small { font-size: 12px; font-weight: 600; color: var(--muted); }
+.fit.basic { box-shadow: inset 3px 0 0 var(--ink); }
+.fit:focus-visible { outline: 3px solid var(--ink); outline-offset: 1px; }
+@media (min-width: 820px) { .only-touch { display: none; } }
+.slots.fits { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, var(--chip-h)); grid-auto-columns: max-content; align-content: start; gap: 5px 6px; overflow-x: auto; overscroll-behavior-x: contain; padding: 0; }
+.slots.fits .no-room { grid-row: 1 / span 2; align-self: center; white-space: normal; max-width: 260px; }
+.fit-close.picker-close { grid-row: 1 / span 2; width: 34px; height: auto; border-radius: 10px; align-self: stretch; }
+.fit { min-height: 0; height: 100%; }
+@media (min-width: 820px) { .slots.fits { display: flex; flex-wrap: wrap; } .fit-close.picker-close { height: calc(var(--chip-h) - 4px); } }

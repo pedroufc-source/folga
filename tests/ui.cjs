@@ -61,8 +61,20 @@ function listen(page, label, base) {
   });
 }
 async function boardXY(page, day, hour) {
+  const b = (await state(page)).board, c = b.cols[day];
+  return { x: b.left + c.x + c.w / 2, y: b.top + b.gy + (hour - b.firstHour + .5) * b.rh };
+}
+// Cabeçalho da agenda (SEG 19, TER 20…): no celular, abre o dia.
+async function headerXY(page, day) {
   const b = (await state(page)).board;
-  return { x: b.left + b.gx + (day + .5) * b.cw, y: b.top + b.gy + (hour - b.firstHour + .5) * b.rh };
+  return { x: b.left + b.gx + (day + .5) * b.cw, y: b.top + b.gy / 2 };
+}
+// Deslizar na agenda: dir -1 = dedo para a esquerda (próximo dia).
+async function swipe(page, dir) {
+  const b = (await state(page)).board;
+  const y = b.top + b.gy + 2.5 * b.rh, x0 = b.left + b.width * .5;
+  await page.mouse.move(x0, y); await page.mouse.down();
+  await page.mouse.move(x0 + dir * b.width * .3, y, { steps: 6 }); await page.mouse.up();
 }
 const act = (page, tap) => sel => (tap ? page.locator(sel).first().tap() : page.locator(sel).first().click());
 async function put(page, uid, day, start, tap = false) {
@@ -135,6 +147,19 @@ async function desktopFlows(browser, base) {
   assert.equal(s.tab, 'survive', 'a lista pra viver só abre depois do básico');
   assert.match(s.status, /^Primeiro, o que é pra sobreviver\./);
   check('Lista "pra viver" trancada até encaixar tudo "pra sobreviver"');
+
+  const hd = await headerXY(page, 1);
+  await page.mouse.click(hd.x, hd.y);
+  assert.equal((await state(page)).view, 'week', 'no computador, a semana inteira já cabe');
+  const free = await boardXY(page, 6, 14);
+  await page.mouse.click(free.x, free.y);
+  s = await state(page);
+  assert.deepEqual(s.slotPick, { day: 6, hour: 14 });
+  assert.ok(s.fits.includes('mercado.0') && !s.fits.some(uid => uid.startsWith('praia')), 'horário primeiro: só o básico que cabe ali');
+  assert.equal(await page.locator('#picker .fit').count(), s.fits.length);
+  await page.keyboard.press('Escape');
+  assert.equal((await state(page)).slotPick, null);
+  check('Horário primeiro: tocar num horário livre mostra o que cabe ali');
 
   let p = await boardXY(page, 0, 7);
   await page.mouse.click(p.x, p.y);
@@ -353,6 +378,32 @@ async function mobileLayouts(browserType, base) {
     assert.equal(await insideViewport(page, '#picker [data-work="tin2"]'), true, `${phone.name}: botões do transporte visíveis`);
     await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}.png`) });
     await page.tap('#picker .picker-close');
+    // Visão do dia, como na agenda do celular: toque no dia, deslize para trocar, toque num horário livre.
+    let h = await headerXY(page, 4);
+    await page.touchscreen.tap(h.x, h.y);
+    s = await state(page);
+    assert.equal(s.view, 'day'); assert.equal(s.focusDay, 4, `${phone.name}: tocar em SEX abre a sexta`);
+    assert.ok(s.board.cols[4].w >= 150, `${phone.name}: o dia ocupa a largura (${s.board.cols[4].w}px)`);
+    assert.deepEqual(await noScroll(page), { vertical: true, horizontal: true }, `${phone.name}: visão do dia sem rolar`);
+    await swipe(page, -1);
+    assert.equal((await state(page)).focusDay, 5, `${phone.name}: deslizar troca de dia`);
+    await swipe(page, 1);
+    assert.equal((await state(page)).focusDay, 4);
+    const f = await boardXY(page, 4, 20);
+    await page.touchscreen.tap(f.x, f.y);
+    s = await state(page);
+    assert.deepEqual(s.slotPick, { day: 4, hour: 20 }, `${phone.name}: tocar num horário livre abre o que cabe ali`);
+    assert.ok(s.fits.length > 0);
+    assert.equal(await insideViewport(page, '#picker .fit:first-child, #finish-button'), true, `${phone.name}: opções visíveis`);
+    await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-dia.png`) });
+    const first = s.fits[0];
+    await page.tap('#picker .fit >> nth=0');
+    s = await state(page);
+    assert.equal(s.week.plans.find(x => x.uid === first).day, 4, `${phone.name}: o plano entra no dia em foco`);
+    if (s.selected) await page.tap('#picker .picker-close');
+    h = await headerXY(page, 4);
+    await page.touchscreen.tap(h.x, h.y);
+    assert.equal((await state(page)).view, 'week', `${phone.name}: tocar no dia em foco volta para a semana`);
     if (phone.name === 'iphone-14' || phone.name === 'iphone-se-1') {
       await fillTab(page, 'survive', true);
       await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-sobreviveu.png`) });
@@ -376,7 +427,7 @@ async function mobileLayouts(browserType, base) {
     await context.close();
   }
   await browser.close();
-  check(`Celular (${label}): de 320×460 a 430×740 o jogo cabe sem rolar; game over e 5×2 cabem na tela`);
+  check(`Celular (${label}): de 320×460 a 430×740 o jogo cabe sem rolar; visão do dia, deslizar e horário primeiro; game over e 5×2 cabem na tela`);
 }
 
 (async () => {

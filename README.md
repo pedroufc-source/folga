@@ -15,7 +15,7 @@ Sem moralismo: dá para tirar sugestões, pôr mais do catálogo (bet, bar, bail
 
 ## Como jogar
 
-- **Celular:** toque num item da lista e depois num espaço livre da agenda. Para mexer no trabalho, no almoço ou no transporte, toque no bloco.
+- **Celular:** toque num item da lista e depois num espaço livre da agenda, ou toque primeiro num horário livre para ver o que cabe ali. Para mexer no trabalho, no almoço ou no transporte, toque no bloco. Toque no dia (SEG, TER…) para ver de perto; deslize para trocar de dia.
 - **Computador:** clique como no celular ou arraste.
 - "＋ Mais coisas" abre as sugestões e o campo para criar um item. "Desfazer" volta a última jogada.
 

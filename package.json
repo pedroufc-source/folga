@@ -1,6 +1,6 @@
 {
   "name": "folga",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "private": true,
   "description": "Jogo de encaixar a semana: sua vida cabe na 6×1?",
   "scripts": {
@@ -8,7 +8,8 @@
     "test": "node --test tests/engine.test.cjs",
     "test:ui": "node tests/ui.cjs",
     "test:all": "npm test && npm run test:ui",
-    "images": "node tools/make-images.cjs"
+    "images": "node tools/make-images.cjs",
+    "deploy:teste": "node tools/deploy-teste.cjs teste"
   },
   "devDependencies": {
     "playwright": "1.59.1"
