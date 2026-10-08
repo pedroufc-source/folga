@@ -315,11 +315,11 @@
     }
     return true;
   }
-  // Todo mundo vive primeiro a 6×1 (rodada 0) e depois a 5×2 (rodada 1). `vote` guarda a escolha
-  // da primeira página; `clock`, os segundos que restam na semana 6×1.
+  // Todo mundo cai direto na 6×1 (rodada 0) e depois vai para a 5×2 (rodada 1). `clock` guarda os
+  // segundos que restam na semana 6×1; `introSeen`, se a janela de "como jogar" já foi vista.
   function validateSave(data) {
-    if (!data || data.version !== 5 || !['playing', 'gameover', 'results'].includes(data.mode)) return null;
-    if (![0, 1].includes(data.vote) || ![0, 1].includes(data.round)) return null;
+    if (!data || data.version !== 6 || !['playing', 'gameover', 'results'].includes(data.mode)) return null;
+    if (![0, 1].includes(data.round) || typeof data.introSeen !== 'boolean') return null;
     if ((data.mode === 'gameover' && data.round !== 0) || (data.mode === 'results' && data.round !== 1)) return null;
     if (typeof data.clock !== 'number' || !(data.clock >= 0 && data.clock <= CLOCK_SECONDS)) return null;
     if (!Array.isArray(data.items) || data.items.length > 40 || !data.items.every(validItem)) return null;
@@ -327,7 +327,7 @@
     if (!Array.isArray(data.weeks) || data.weeks.length !== 2 || !Number.isInteger(data.nextId)) return null;
     if (!data.weeks[0] || (data.round === 1 && !data.weeks[1])) return null;
     if (![0, 1].every(r => validWeek(r, data.weeks[r], data.items))) return null;
-    return JSON.parse(JSON.stringify({ version: 5, mode: data.mode, vote: data.vote, round: data.round, clock: data.clock,
+    return JSON.parse(JSON.stringify({ version: 6, mode: data.mode, round: data.round, clock: data.clock, introSeen: data.introSeen,
       items: data.items, weeks: data.weeks, nextId: data.nextId }));
   }
 

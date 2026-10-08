@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f4efe4">
   <title>FOLGA — Sua vida cabe na 6×1?</title>
-  <meta name="description" content="Você trabalha na escala 6×1 e vai votar no segundo turno. Escolha seu candidato e monte a sua semana. Um jogo de dois minutos.">
+  <meta name="description" content="Você trabalha na escala 6×1. Tem 2 minutos para encaixar a sua vida na semana. Depois, compare com a 5×2.">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="pt_BR">
   <meta property="og:site_name" content="FOLGA">
   <meta property="og:title" content="FOLGA — Sua vida cabe na 6×1?">
-  <meta property="og:description" content="Você trabalha na 6×1 e vai votar no segundo turno. Escolha seu candidato e monte a sua semana.">
+  <meta property="og:description" content="Você trabalha na 6×1. Tem 2 minutos para encaixar a sua vida na semana. Depois, compare com a 5×2.">
   <meta property="og:url" content="https://pedroufc-source.github.io/folga/">
   <meta property="og:image" content="https://pedroufc-source.github.io/folga/og.png">
   <meta property="og:image:width" content="1200">
@@ -23,49 +23,28 @@
   <script src="engine.js" defer></script>
   <script src="app.js" defer></script>
 </head>
-<body data-screen="intro" data-round="0">
+<body data-screen="game" data-round="0">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <symbol id="star" viewBox="0 0 24 24"><path d="M12 1.8l3 7.1 7.7.6-5.9 5 1.8 7.5L12 18l-6.6 4 1.8-7.5-5.9-5 7.7-.6z"/></symbol>
     <symbol id="arminha" viewBox="0 0 24 24"><path d="M8.2 2.6c.9 0 1.6.7 1.6 1.6V8.6h10.4c1 0 1.8.8 1.8 1.8s-.8 1.8-1.8 1.8h-5.4v.6c.8.2 1.3.9 1.3 1.7s-.5 1.4-1.2 1.6c.5.3.8.9.8 1.5 0 1-.8 1.8-1.8 1.8H7.6c-2.4 0-4.2-1.9-4.2-4.2v-3.9c0-1.3.9-2.4 2.1-2.7V4.2c0-.9.7-1.6 1.6-1.6z"/><rect x="0.6" y="10.2" width="2.2" height="8.4" rx=".6"/></symbol>
   </svg>
 
   <header class="topbar">
-    <button class="brand" id="home-button" aria-label="FOLGA: voltar ao início">FOLGA</button>
+    <button class="brand" id="home-button" data-about aria-label="FOLGA: como funciona">FOLGA</button>
     <button class="nav-button" id="about-button"><span aria-hidden="true" class="nav-icon">?</span><span>Como funciona</span></button>
   </header>
 
   <main>
-    <section id="intro" class="screen intro" aria-labelledby="intro-title">
-      <p class="eyebrow">Segundo turno · 25 de outubro</p>
-      <h1 id="intro-title">Você trabalha na escala 6×1.</h1>
-      <p class="lead">Seis dias de trabalho, uma folga. E no dia 25 você vai votar.</p>
-      <h2 class="ask">Qual é o seu candidato?</h2>
-      <div class="choices">
-        <button class="choice choice-0" data-choose="0" aria-label="Flávio: jogar a semana 6×1">
-          <span class="choice-name">Flávio</span>
-          <span class="strip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i class="off"><svg><use href="#arminha"/></svg></i></span>
-          <span class="choice-sub">semana 6×1 · 44h</span>
-        </button>
-        <button class="choice choice-1" data-choose="1" aria-label="Lula: jogar a semana 5×2">
-          <span class="choice-name"><svg class="choice-star" aria-hidden="true"><use href="#star"/></svg>Lula</span>
-          <span class="strip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i class="off"><svg><use href="#star"/></svg></i><i class="off"><svg><use href="#star"/></svg></i></span>
-          <span class="choice-sub">semana 5×2 · 40h</span>
-        </button>
-      </div>
-      <button class="secondary" id="resume-button" hidden>Continuar minha semana <span aria-hidden="true">→</span></button>
-      <p class="fine"><b>Primeiro, todo mundo vive a semana 6×1. Você tem 2 minutos.</b> Trabalho, casa, rolê, amor, descanso: tudo se move. <button class="link-button" data-about>Por que 6×1 e 5×2?</button></p>
-    </section>
-
     <section id="game" class="screen game" hidden aria-labelledby="week-title">
       <div class="band">
-        <button class="brand brand-small" data-home aria-label="FOLGA: voltar ao início">FOLGA</button>
+        <button class="brand brand-small" data-about aria-label="FOLGA: como funciona">FOLGA</button>
         <div class="band-copy">
           <h1 id="week-title" tabindex="-1"><svg class="band-icon" aria-hidden="true"><use id="band-icon-use" href="#arminha"/></svg><span id="week-scale">6×1</span><span class="sr-only"> — </span><small id="week-step">Com Flávio</small></h1>
           <p id="week-sub">44h de trabalho · 1 folga</p>
         </div>
         <p class="clock" id="clock" role="timer" aria-label="Tempo que resta na semana"><span aria-hidden="true">⏱</span> <b id="clock-text">2:00</b></p>
         <p class="score" aria-label="Planos encaixados"><strong id="score">0</strong><span id="score-total">/13</span></p>
-        <button class="nav-button band-help" data-about aria-label="Como funciona"><span aria-hidden="true" class="nav-icon">?</span></button>
+        <button class="nav-button band-help" id="help-button" aria-label="Como jogar"><span aria-hidden="true" class="nav-icon">?</span></button>
       </div>
       <div class="clock-bar" aria-hidden="true"><i id="clock-bar"></i></div>
       <div class="play">
@@ -104,12 +83,25 @@
     </section>
   </main>
 
+  <dialog id="howto-dialog" class="howto" aria-labelledby="howto-title">
+    <p class="eyebrow">Segundo turno · 25 de outubro</p>
+    <h2 id="howto-title">Você trabalha na escala 6×1.</h2>
+    <p>Seis dias de trabalho, uma folga. Você tem <b>2 minutos</b> para encaixar a sua vida na semana.</p>
+    <ul class="howto-steps">
+      <li><span aria-hidden="true">👆</span><p>Toque num plano da lista e depois num espaço livre do calendário.</p></li>
+      <li><span aria-hidden="true">💼</span><p>Tudo se move, até o trabalho. Toque nele para mudar o horário, fazer hora extra ou mexer no almoço.</p></li>
+      <li><span aria-hidden="true">⏱</span><p>Quando o tempo acabar, a semana acaba.</p></li>
+    </ul>
+    <button class="primary full" id="howto-start">Começar a semana <span aria-hidden="true">→</span></button>
+    <p class="fine howto-more"><button class="link-button" data-about>Por que 6×1 e 5×2?</button></p>
+  </dialog>
+
   <dialog id="about-dialog" aria-labelledby="about-title">
     <button class="close-button" data-close aria-label="Fechar">×</button>
     <p class="eyebrow">Como funciona</p>
     <h2 id="about-title">Você monta a semana</h2>
     <ol class="rules">
-      <li><b>Primeiro, a 6×1.</b> Todo mundo vive a semana de seis dias de trabalho, com 2 minutos no relógio. Quando o tempo acaba, a semana acaba.</li>
+      <li><b>Primeiro, a 6×1.</b> Você cai direto na semana de seis dias de trabalho, com 2 minutos no relógio. Quando o tempo acaba, a semana acaba.</li>
       <li><b>Tudo se move.</b> Toque em algo e depois num espaço livre. No dia de trabalho dá para fazer hora extra e mudar o almoço de lugar, dentro do que a CLT permite.</li>
       <li><b>Depois, a 5×2.</b> A mesma vida, com um dia a mais de folga e sem relógio. A lista é sua: use as sugestões ou crie o que quiser.</li>
     </ol>
@@ -184,7 +176,7 @@
   <dialog id="restart-dialog" aria-labelledby="restart-title">
     <button class="close-button" data-close aria-label="Fechar">×</button>
     <h2 id="restart-title">Jogar de novo?</h2>
-    <p>A partida atual será apagada deste navegador e você volta para a primeira página.</p>
+    <p>A partida atual será apagada deste navegador e uma nova semana 6×1 começa.</p>
     <div class="dialog-actions"><button class="secondary" data-close>Voltar</button><button class="primary" id="confirm-restart">Recomeçar</button></div>
   </dialog>
 

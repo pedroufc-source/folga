@@ -1,18 +1,18 @@
-// FOLGA — interface: primeira página, semana 6×1 com relógio e game over, semana 5×2, calendário em
-// canvas, lista de planos, salvamento, resultado e compartilhamento (Stories/WhatsApp, link e texto).
+// FOLGA — interface: quem abre cai direto na semana 6×1 (com relógio e game over), depois na 5×2;
+// calendário em canvas, lista de planos, salvamento, resultado e compartilhamento (Stories/WhatsApp).
 (() => {
   'use strict';
   const E = window.FolgaEngine;
   const $ = id => document.getElementById(id);
-  const KEY = 'folga-v5';
+  const KEY = 'folga-v6';
   const FIRST = E.FIRST_HOUR, LAST = E.LAST_HOUR, ROWS = LAST - FIRST;
   const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
   const EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
   const DISPLAY = "Anton, Impact, 'Arial Narrow', sans-serif";
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const fresh = () => ({ version: 5, mode: 'intro', vote: 0, round: 0, clock: E.CLOCK_SECONDS, items: E.starterItems(), weeks: [null, null], nextId: 1 });
+  const fresh = () => ({ version: 6, mode: 'playing', round: 0, clock: E.CLOCK_SECONDS, introSeen: false, items: E.starterItems(), weeks: [E.newWeek(0), null], nextId: 1 });
 
-  let state = fresh(), storageOK = true, resumeMode = null;
+  let state = fresh(), storageOK = true;
   let selected = null, history = [], statusText = '', statusTone = '';
   let pointer = null, hover = null, pop = null, geo = null, suppressClick = false, workTap = null, lastTick = 0;
   const share = { ready: null, file: null, url: '', text: '', size: 0 };
@@ -21,7 +21,7 @@
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { /* Save inválido: começa do zero. */ }
     const valid = E.validateSave(saved);
-    if (valid) { state = valid; resumeMode = state.mode; state.mode = 'intro'; }
+    if (valid) state = valid;
   } catch { storageOK = false; }
 
   const board = $('board');
@@ -37,8 +37,7 @@
   const spanOf = uid => E.spanOf(state.round, week(), items(), uid);
 
   function save() {
-    const mode = resumeMode || state.mode;
-    try { if (mode === 'intro') localStorage.removeItem(KEY); else localStorage.setItem(KEY, JSON.stringify({ ...state, mode, clock: Math.max(0, Math.round(state.clock)) })); }
+    try { localStorage.setItem(KEY, JSON.stringify({ ...state, clock: Math.max(0, Math.round(state.clock)) })); }
     catch { storageOK = false; }
   }
 
@@ -403,9 +402,9 @@
       $('go-text').textContent = 'Seis dias de trabalho, um de folga. E o relógio volta a correr.';
       $('go-lula').innerHTML = `Ver como seria com ${who(1)} <span aria-hidden="true">→</span>`;
     } else {
-      $('go-reply').textContent = state.vote === 0 ? 'Se arrependeu? Você ainda pode mudar seu voto.' : 'Existe vida além do trabalho.';
-      $('go-text').textContent = `Com ${who(1)}, a mesma vida na 5×2: 40h de trabalho, um dia inteiro a mais de folga e sem relógio. Seus planos vão junto.`;
-      $('go-lula').innerHTML = state.vote === 0 ? `Mudar meu voto para ${who(1)} <span aria-hidden="true">→</span>` : `Ver a semana com ${who(1)} <span aria-hidden="true">→</span>`;
+      $('go-reply').textContent = 'Se arrependeu? Você ainda pode mudar seu voto.';
+      $('go-text').textContent = `Existe vida além do trabalho. Com ${who(1)}, a mesma vida na 5×2: 40h de trabalho, um dia inteiro a mais de folga e sem relógio. Seus planos vão junto.`;
+      $('go-lula').innerHTML = `Mudar meu voto para ${who(1)} <span aria-hidden="true">→</span>`;
     }
     $('go-lula').focus();
   }
@@ -422,44 +421,27 @@
     say(`Com ${who(1)}, são 5 dias de trabalho e um dia inteiro a mais pra você. Sem relógio. Encaixe o que ficou de fora.`);
     save(); render(); focusHeading();
   }
-  function choose(vote) {
-    const keep = resumeMode ? E.starterItems() : items();
-    state = fresh();
-    state.items = keep.length ? keep : E.starterItems();
-    state.vote = vote; state.round = 0; state.weeks[0] = E.newWeek(0); state.mode = 'playing';
-    resumeMode = null; selected = null; history = []; lastTick = performance.now();
-    say(vote === 0 ? `Você escolheu ${who(0)}: a semana é 6×1. Monte sua vida antes que o tempo acabe.` : `Você escolheu ${who(1)}. Mas hoje a semana ainda é 6×1: monte sua vida antes que o tempo acabe.`);
-    save(); render(); focusHeading();
-    if (!storageOK) say('Seu navegador não deixou salvar. Dá para jogar normalmente com a página aberta.');
-  }
-  function resume() {
-    if (!resumeMode) return;
-    state.mode = resumeMode; resumeMode = null; lastTick = performance.now();
-    if (!statusText) say(firstHint());
-    render(); focusHeading();
-    if (state.mode === 'gameover') showGameOver('time');
-  }
   const firstHint = () => (isWide()
     ? 'Escolha um plano na lista (ou arraste) e solte num espaço livre. Tudo se move, até o trabalho.'
     : 'Toque num plano e depois num espaço livre. Tudo se move, até o trabalho.');
   function restart() {
     closeDialog($('restart-dialog'));
-    state = fresh(); resumeMode = null; selected = null; history = []; statusText = '';
-    save(); render(); focusHeading();
+    state = fresh(); state.introSeen = true; selected = null; history = []; statusText = ''; share.ready = null;
+    lastTick = performance.now(); save(); render(); focusHeading();
   }
-  function goHome() {
-    if (state.mode === 'intro') return;
-    closeAllDialogs(); resumeMode = state.mode; state.mode = 'intro'; selected = null; save(); render(); focusHeading();
+  // Primeira visita: a janela curta de "como jogar" abre por cima da semana; o relógio só anda depois.
+  function showHowto() {
+    openDialog('howto-dialog');
+    $('howto-start').focus({ preventScroll: true });
   }
 
   // ---------- Telas ----------
   function render() {
-    const screen = state.mode === 'playing' || state.mode === 'gameover' ? 'game' : state.mode;
+    const screen = state.mode === 'results' ? 'results' : 'game';
     document.body.dataset.screen = screen;
     document.body.dataset.round = String(state.round);
-    for (const id of ['intro', 'game', 'results']) $(id).hidden = id !== screen;
-    if (screen === 'intro') $('resume-button').hidden = !resumeMode;
-    else if (screen === 'game') renderGame();
+    for (const id of ['game', 'results']) $(id).hidden = id !== screen;
+    if (screen === 'game') renderGame();
     else renderResults();
   }
   function renderGame() {
@@ -561,7 +543,7 @@
     prepareShare();
   }
   function focusHeading() {
-    const target = { intro: 'intro-title', playing: 'week-title', gameover: 'week-title', results: 'results-title' }[state.mode];
+    const target = { playing: 'week-title', gameover: 'week-title', results: 'results-title' }[state.mode];
     const el = $(target); el.tabIndex = -1; el.focus({ preventScroll: true });
     window.scrollTo(0, 0);
   }
@@ -697,12 +679,14 @@
   function closeAllDialogs() { document.querySelectorAll('dialog[open]').forEach(d => d.close()); }
 
   // ---------- Eventos ----------
-  document.querySelectorAll('[data-choose]').forEach(b => b.addEventListener('click', () => choose(Number(b.dataset.choose))));
-  $('resume-button').addEventListener('click', resume);
-  $('home-button').addEventListener('click', goHome);
-  document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', goHome));
   $('about-button').addEventListener('click', () => openDialog('about-dialog'));
-  document.querySelectorAll('[data-about]').forEach(b => b.addEventListener('click', () => openDialog('about-dialog')));
+  document.querySelectorAll('[data-about]').forEach(b => b.addEventListener('click', () => { closeDialog($('howto-dialog')); openDialog('about-dialog'); }));
+  $('help-button').addEventListener('click', showHowto);
+  $('howto-start').addEventListener('click', () => closeDialog($('howto-dialog')));
+  $('howto-dialog').addEventListener('close', () => {
+    if (!state.introSeen) { state.introSeen = true; save(); }
+    lastTick = performance.now();
+  });
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeDialog(b.closest('dialog'))));
   document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => {
     if (e.target !== d || d.id === 'gameover-dialog') return;
@@ -858,14 +842,14 @@
   window.render_game_to_text = () => {
     const rect = board.getBoundingClientRect(), wk = week();
     return JSON.stringify({
-      mode: state.mode, round: state.round, vote: state.vote, clock: Math.round(state.clock * 10) / 10, scale: E.SCENARIOS[state.round].scale,
+      mode: state.mode, round: state.round, introSeen: state.introSeen, clock: Math.round(state.clock * 10) / 10, scale: E.SCENARIOS[state.round].scale,
       candidate: who(state.round), selected, dialog: document.querySelector('dialog[open]')?.id || null, status: statusText, statusTone,
-      resumeMode, storageAvailable: storageOK, historyLength: history.length,
+      storageAvailable: storageOK, historyLength: history.length,
       items: items().map(it => ({ uid: it.uid, name: it.name, hours: it.hours, custom: !it.ref })),
       week: wk, weeks: state.weeks, stats: [0, 1].map(r => (state.weeks[r] ? E.stats(r, state.weeks[r], items()) : null)),
       maxPlans: [E.maxPlans(0, items()), E.maxPlans(1, items())],
       options: selected && wk ? E.allOptions(state.round, wk, items(), selected) : [],
-      board: geo && state.mode !== 'results' && state.mode !== 'intro' ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, firstHour: FIRST, ...geo } : null,
+      board: geo && state.mode !== 'results' ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, firstHour: FIRST, ...geo } : null,
       share: { text: share.text, whatsapp: $('share-whatsapp').getAttribute('href'), imageBytes: share.size || 0, nativeShare: !$('share-native').hidden }
     });
   };
@@ -873,4 +857,7 @@
   window.advanceTime = ms => { spend((ms || 0) / 1000); drawBoard(); return Promise.resolve(); };
 
   render();
+  if (state.mode === 'gameover') showGameOver('time');
+  else if (!state.introSeen) showHowto();
+  if (!storageOK && state.mode === 'playing') say('Seu navegador não deixou salvar. Dá para jogar normalmente com a página aberta.');
 })();

@@ -100,30 +100,32 @@ async function desktopFlows(browser, base) {
   const page = await context.newPage(); listen(page, 'desktop', base);
   await page.goto(base + '/');
   await page.waitForFunction(() => window.render_game_to_text);
-  assert.equal((await state(page)).mode, 'intro');
-  assert.equal(await page.locator('[data-choose]').count(), 2);
+  let s = await state(page);
+  assert.equal(s.mode, 'playing'); assert.equal(s.round, 0); assert.equal(s.scale, '6×1');
+  assert.equal(s.dialog, 'howto-dialog', 'primeira visita: cai na semana com o "como jogar" por cima');
+  assert.equal(await page.locator('[data-choose]').count(), 0, 'não pergunta candidato');
+  await page.waitForTimeout(1300);
+  assert.equal((await state(page)).clock, 120, 'o relógio espera o "como jogar" fechar');
   await page.screenshot({ path: path.join(out, 'desktop-inicio.png') });
-  await page.click('[data-about] >> nth=0');
+  await page.click('#howto-dialog [data-about]');
+  assert.equal((await state(page)).dialog, 'about-dialog');
   for (const host of ['folhape.com.br', 'diariodocomercio.com.br', 'jornaldebrasilia.com.br', 'senado.leg.br', 'del5452.htm', 'brasildefato.com.br', 'cnnbrasil.com.br']) {
     assert.ok(await page.locator(`#about-dialog a[href*="${host}"]`).count(), `fonte ${host}`);
   }
   await page.screenshot({ path: path.join(out, 'desktop-premissas.png') });
   await page.keyboard.press('Escape');
-  check('Primeira página: escolha do candidato; fontes, CLT e Vida Além do Trabalho no diálogo');
-
-  await page.click('[data-choose="0"]');
-  let s = await state(page);
-  assert.equal(s.mode, 'playing'); assert.equal(s.round, 0); assert.equal(s.scale, '6×1'); assert.equal(s.vote, 0);
+  s = await state(page);
+  assert.equal(s.introSeen, true);
   assert.equal(s.items.length, 13); assert.equal(s.week.work.length, 6); assert.deepEqual(s.maxPlans, [12, 13]);
-  assert.ok(s.clock > 118 && s.clock <= 120);
-  await page.click('#about-button').catch(() => page.click('.band-help'));
+  await page.waitForTimeout(1300);
+  assert.ok((await state(page)).clock < 119.2, 'o relógio anda');
+  await page.click('#help-button');
+  assert.equal((await state(page)).dialog, 'howto-dialog');
   const paused = (await state(page)).clock;
   await page.waitForTimeout(1300);
   assert.equal((await state(page)).clock, paused, 'o relógio para com um diálogo aberto');
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(1300);
-  assert.ok((await state(page)).clock < paused - .8, 'o relógio anda');
-  check('A semana 6×1 vem com relógio de 2 minutos, que para quando um diálogo abre');
+  await page.click('#howto-start');
+  check('Abre direto na semana 6×1, sem perguntar candidato; "como jogar" na primeira visita; relógio de 2 minutos que para nos diálogos; fontes no "Como funciona"');
 
   await page.click('[data-task="mercado"]');
   let p = await boardXY(page, 0, 21);
@@ -271,47 +273,43 @@ async function desktopFlows(browser, base) {
 
   await page.reload();
   await page.waitForFunction(() => window.render_game_to_text);
-  await page.click('#resume-button');
-  assert.equal((await state(page)).mode, 'results');
+  s = await state(page);
+  assert.equal(s.mode, 'results'); assert.equal(s.dialog, null);
   await page.screenshot({ path: path.join(out, 'desktop-resultado.png'), fullPage: true });
   await page.click('#replay-button');
   await page.click('#confirm-restart');
   s = await state(page);
-  assert.equal(s.mode, 'intro'); assert.deepEqual(s.weeks, [null, null]);
-  check('Progresso sobrevive à recarga; jogar de novo volta para a primeira página');
+  assert.equal(s.mode, 'playing'); assert.equal(s.round, 0); assert.equal(s.weeks[1], null); assert.equal(s.dialog, null);
+  assert.equal(s.clock, 120);
+  check('Progresso sobrevive à recarga; jogar de novo começa outra semana 6×1 direto');
 
-  await page.click('[data-choose="1"]');
-  s = await state(page);
-  assert.equal(s.vote, 1); assert.equal(s.round, 0); assert.equal(s.scale, '6×1', 'quem escolhe Lula também vive a 6×1 primeiro');
-  assert.match(s.status, /hoje a semana ainda é 6×1/);
   await page.evaluate(() => window.advanceTime(125000));
   assert.equal((await state(page)).mode, 'gameover');
   await page.reload();
   await page.waitForFunction(() => window.render_game_to_text);
-  await page.click('#resume-button');
   assert.equal((await state(page)).dialog, 'gameover-dialog', 'o game over volta depois de recarregar');
   await page.click('#go-no');
-  assert.match(await page.locator('#go-reply').innerText(), /Existe vida além do trabalho/i);
+  assert.match(await page.locator('#go-text').innerText(), /Existe vida além do trabalho/);
   await page.click('#go-lula');
   assert.equal((await state(page)).round, 1);
-  check('Quem escolhe Lula também passa pela 6×1 e pelo game over antes da 5×2');
+  check('O game over volta depois de recarregar e leva ao Lula');
   await context.close();
 }
 
 async function savesAndOffline(browser, base) {
   let context = await browser.newContext();
   let page = await context.newPage(); listen(page, 'save-corrompido', base);
-  await page.addInitScript(() => localStorage.setItem('folga-v5', '{quebrado'));
+  await page.addInitScript(() => localStorage.setItem('folga-v6', '{quebrado'));
   await page.goto(base + '/');
   let s = await state(page);
-  assert.equal(s.mode, 'intro'); assert.equal(s.resumeMode, null);
+  assert.equal(s.mode, 'playing'); assert.equal(s.dialog, 'howto-dialog'); assert.equal(s.week.plans.length, 0);
   await context.close();
 
   context = await browser.newContext();
   page = await context.newPage(); listen(page, 'sem-armazenamento', base);
   await page.addInitScript(() => Object.defineProperty(window, 'localStorage', { get() { throw new Error('bloqueado'); } }));
   await page.goto(base + '/');
-  await page.click('[data-choose="0"]');
+  await page.click('#howto-start');
   await put(page, 'praia', 6, 7);
   s = await state(page);
   assert.equal(s.storageAvailable, false); assert.equal(s.week.plans.length, 1);
@@ -321,7 +319,7 @@ async function savesAndOffline(browser, base) {
   context = await browser.newContext({ offline: true, viewport: { width: 390, height: 664 } });
   page = await context.newPage(); listen(page, 'arquivo-local');
   await page.goto('file://' + path.join(root, 'index.html'));
-  await page.click('[data-choose="1"]');
+  await page.click('#howto-start');
   await put(page, 'estudo', 3, 19);
   assert.equal(await page.evaluate(() => document.fonts.check('30px Anton')), true, 'fonte local carregada');
   await context.close();
@@ -336,10 +334,11 @@ async function mobileLayouts(browserType, base) {
     const page = await context.newPage(); listen(page, `${label}-${phone.name}`, base);
     await page.goto(base + '/');
     await page.waitForFunction(() => window.render_game_to_text);
+    assert.equal((await state(page)).dialog, 'howto-dialog');
+    assert.equal(await insideViewport(page, '#howto-start'), true, `${phone.name}: "Começar a semana" visível sem rolar`);
     assert.equal((await noScroll(page)).horizontal, true, `${phone.name}: início sem rolagem lateral`);
-    assert.equal(await insideViewport(page, '[data-choose]'), true, `${phone.name}: os dois candidatos aparecem sem rolar`);
     await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-inicio.png`) });
-    await page.tap('[data-choose="0"]');
+    await page.tap('#howto-start');
     assert.deepEqual(await noScroll(page), { vertical: true, horizontal: true }, `${phone.name}: jogo cabe na tela sem rolar`);
     assert.equal(await insideViewport(page, '#tray, #add-chip, #finish-button, #undo-button, #board, #clock, #score'), true, `${phone.name}: relógio, lista e botões visíveis`);
     const b = (await state(page)).board;

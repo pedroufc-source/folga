@@ -1,5 +1,11 @@
 # Histórico
 
+## 4.1.0 — 8/10/2026
+
+- Sai a pergunta do candidato. Como no FLÁVIO, quem abre o link cai direto na semana 6×1, com uma janela curta de "como jogar" na primeira visita; o relógio só anda depois que ela fecha. "Jogar de novo" começa outra semana 6×1.
+- No game over, "Não" traz para todos "Se arrependeu? Você ainda pode mudar seu voto".
+- Preview do link: "Sua vida cabe na 6×1? 2 minutos pra encaixar a semana".
+
 ## 4.0.0 — 8/10/2026
 
 - **Todo mundo vive a 6×1 primeiro**, com 2 minutos no relógio. Fim do tempo (ou da semana): **GAME OVER**, com "Tá cansado? Você é a favor da escala 6×1?". "Não" leva à 5×2 do Lula, sem relógio; para quem escolheu Flávio, "Se arrependeu? Você ainda pode mudar seu voto". "Sim" recomeça a 6×1.

@@ -123,10 +123,11 @@ test('Itens próprios: nome e horas validados', () => {
 });
 
 test('Saves inválidos ou incoerentes são recusados', () => {
-  const ok = { version: 5, mode: 'playing', vote: 1, round: 0, clock: 80, items, weeks: [{ work: E.defaultWork(0), plans: [{ uid: 'praia', day: 6, start: 7 }] }, null], nextId: 1 };
+  const ok = { version: 6, mode: 'playing', round: 0, clock: 80, introSeen: true, items, weeks: [{ work: E.defaultWork(0), plans: [{ uid: 'praia', day: 6, start: 7 }] }, null], nextId: 1 };
   assert.ok(E.validateSave(ok));
   assert.ok(E.validateSave({ ...ok, mode: 'gameover', clock: 0 }));
-  assert.equal(E.validateSave({ ...ok, version: 4 }), null);
+  assert.equal(E.validateSave({ ...ok, version: 5 }), null);
+  assert.equal(E.validateSave({ ...ok, introSeen: undefined }), null);
   assert.equal(E.validateSave({ ...ok, round: 1 }), null, 'a 5×2 só depois da 6×1');
   assert.equal(E.validateSave({ ...ok, clock: 999 }), null);
   const noLunch = E.defaultWork(0).map(w => (w.uid === 'w0' ? { ...w, lunch: false, lunchAt: 8 } : w));

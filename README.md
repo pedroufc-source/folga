@@ -2,9 +2,9 @@
 
 **Jogue:** https://pedroufc-source.github.io/folga/
 
-Você trabalha na escala 6×1 e vai votar no segundo turno, em 25 de outubro. **Qual é o seu candidato?**
+Você trabalha na escala 6×1. Abriu o link, caiu na semana.
 
-1. **Todo mundo vive primeiro a semana 6×1**, a do Flávio: seis dias de trabalho, 44h e **2 minutos no relógio** para encaixar a vida.
+1. **A semana 6×1 do Flávio:** seis dias de trabalho, 44h e **2 minutos no relógio** para encaixar a vida. Na primeira visita, uma janela curta explica como jogar; o relógio só anda depois que ela fecha.
 2. O tempo acaba, a semana acaba: **GAME OVER**. "Tá cansado? Você é a favor da escala 6×1?"
 3. **Não:** "Se arrependeu? Você ainda pode mudar seu voto." A mesma vida na **5×2 do Lula**, com cinco dias de trabalho, sem relógio e com os planos no lugar. **Sim:** segunda-feira começa tudo de novo.
 4. O resultado compara as duas semanas e vira imagem para os Stories e o WhatsApp.
