@@ -1,3 +1,5 @@
+// FOLGA — regras puras: semanas, planos, encaixes, imprevisto, contas e texto de compartilhamento.
+// Sem DOM. Exporta window.FolgaEngine no navegador e module.exports no Node (testes).
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -6,66 +8,92 @@
   'use strict';
   const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
   const SHORT_DAYS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+  const FIRST_HOUR = 7, LAST_HOUR = 23;
+  const SITE_URL = 'https://pedroufc-source.github.io/folga/';
+
   const SCENARIOS = [
-    { name: 'Uma folga', scale: '6×1', workDays: 6, workHours: 44, commuteHours: 12, hoursPerDay: [8, 8, 8, 8, 8, 4, 0] },
-    { name: 'Duas folgas', scale: '5×2', workDays: 5, workHours: 40, commuteHours: 10, hoursPerDay: [8, 8, 8, 8, 8, 0, 0] }
+    { scale: '6×1', workHours: 44, commuteHours: 12, hoursPerDay: [8, 8, 8, 8, 8, 4, 0] },
+    { scale: '5×2', workHours: 40, commuteHours: 10, hoursPerDay: [8, 8, 8, 8, 8, 0, 0] }
   ];
+  const offDays = round => SCENARIOS[round].hoursPerDay.map((h, d) => (h ? -1 : d)).filter(d => d >= 0);
+
+  // Janelas e durações são escolhas de desenho do quebra-cabeça (veja REFERENCIAS.md).
+  // `out` é a forma usada em "ficou de fora …".
+  const ALL = [0, 1, 2, 3, 4, 5, 6];
   const TASKS = [
-    { id: 'feira', name: 'Feira da semana', short: 'Feira', hours: 2, days: [5], from: 8, to: 12, color: '#e9b481', icon: '◈', note: 'Sábado, entre 8h e 12h.' },
-    { id: 'sol', name: 'Uma tarde ao sol', short: 'Ao sol', hours: 6, days: [5, 6], from: 10, to: 17, color: '#e9d36e', icon: '☼', note: 'Sábado ou domingo, entre 10h e 17h. Inclui ida e volta.' },
-    { id: 'familia', name: 'Almoço em família', short: 'Família', hours: 3, days: [6], from: 12, to: 16, color: '#dfa3aa', icon: '♡', note: 'Domingo, entre 12h e 16h. Inclui o trajeto.' },
-    { id: 'curso', name: 'Retomar os estudos', short: 'Estudos', hours: 3, days: [1, 3], from: 19, to: 23, color: '#b9aedb', icon: '▧', note: 'Terça ou quinta, entre 19h e 23h. Estudo em casa.' },
-    { id: 'amigos', name: 'Encontrar os amigos', short: 'Amigos', hours: 3, days: [4, 5], from: 19, to: 23, color: '#9ebfd7', icon: '✳', note: 'Sexta ou sábado, entre 19h e 23h. Inclui o trajeto.' },
-    { id: 'corpo', name: 'Mexer o corpo', short: 'Movimento', hours: 2, days: [0, 2], from: 19, to: 23, color: '#aad1bb', icon: '↗', note: 'Segunda ou quarta, entre 19h e 23h. Inclui o trajeto.' },
-    { id: 'projeto', name: 'Tocar meu projeto', short: 'Meu projeto', hours: 4, days: [0, 1, 2, 3, 4, 5, 6], from: 19, to: 23, color: '#c8ce8f', icon: '✦', note: 'Qualquer noite, entre 19h e 23h. Quatro horas seguidas, em casa.' },
-    { id: 'nada', name: 'Não fazer nada', short: 'Pausa', hours: 2, days: [0, 1, 2, 3, 4, 5, 6], from: 8, to: 23, color: '#a7c9c9', icon: '≈', note: 'Qualquer dia, entre 8h e 23h. Um tempo sem obrigação.' }
+    { id: 'feira', name: 'Fazer a feira', short: 'Feira', emoji: '🍅', hours: 2, days: [5], from: 8, to: 12, out: 'a feira', extra: 'A feira é de manhã.' },
+    { id: 'sol', name: 'Praia ou parque', short: 'Praia', emoji: '🌴', hours: 6, days: [5, 6], from: 10, to: 17, out: 'a praia', extra: 'Seis horas, com ida e volta.' },
+    { id: 'familia', name: 'Almoço de domingo', short: 'Almoço', emoji: '🍲', hours: 3, days: [6], from: 12, to: 16, out: 'o almoço de domingo', extra: 'Três horas, com a família.' },
+    { id: 'curso', name: 'Estudar', short: 'Estudo', emoji: '📚', hours: 3, days: [1, 3], from: 19, to: 23, out: 'o estudo', extra: 'Curso ou estudo em casa.' },
+    { id: 'amigos', name: 'Sair com os amigos', short: 'Amigos', emoji: '🍻', hours: 3, days: [4, 5], from: 19, to: 23, out: 'os amigos', extra: 'Com a volta para casa.' },
+    { id: 'corpo', name: 'Academia ou futebol', short: 'Treino', emoji: '⚽', hours: 2, days: [0, 2], from: 19, to: 23, out: 'o treino', extra: 'Com o trajeto.' },
+    { id: 'projeto', name: 'Tempo pro hobby', short: 'Hobby', emoji: '🎸', hours: 4, days: ALL, from: 19, to: 23, out: 'o hobby', extra: 'Quatro horas seguidas: música, costura, videogame…' },
+    { id: 'nada', name: 'Não fazer nada', short: 'Nada', emoji: '😴', hours: 2, days: ALL, from: 8, to: 23, out: 'o descanso', extra: 'Duas horas sem obrigação nenhuma.' }
   ];
-  const EVENT = { day: 2, start: 19, end: 20, kind: 'event', label: 'Atraso no ônibus' };
+  const EVENT = { day: 2, start: 19, end: 20, kind: 'event', label: 'Ônibus atrasado', reason: 'O ônibus atrasou: você ainda está chegando.' };
   const taskById = id => TASKS.find(task => task.id === id);
   const overlaps = (a, b) => a.start < b.end && b.start < a.end;
+
+  function joinList(items) {
+    if (items.length < 2) return items.join('');
+    return `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}`;
+  }
+  function daysText(task) {
+    if (task.days.length === 7) return 'qualquer dia';
+    return joinList(task.days.map(d => DAYS[d].toLowerCase())).replace(/ e (?=[^,]*$)/, ' ou ');
+  }
+  // "sábado, entre 8h e 12h"
+  const windowText = task => `${daysText(task)}, entre ${task.from}h e ${task.to}h`;
+  const capitalize = text => text.charAt(0).toUpperCase() + text.slice(1);
+
   function fixedBlocks(round, eventActive = false) {
     const blocks = [];
+    const add = (day, start, end, kind, label, reason) => blocks.push({ day, start, end, kind, label, reason });
     for (let day = 0; day < 7; day++) {
-      blocks.push({ day, start: 7, end: 8, kind: 'routine', label: 'Rotina' });
       const hours = SCENARIOS[round].hoursPerDay[day];
       const late = eventActive && day === EVENT.day;
+      add(day, 7, 8, 'routine', 'Café', 'É a hora do café e de se arrumar.');
       if (hours === 8) {
-        // The lunch break is routine time, never paid work in this model.
-        blocks.push({ day, start: 12, end: 13, kind: 'routine', label: 'Almoço / intervalo' });
-        blocks.push({ day, start: late ? 20 : 19, end: late ? 21 : 20, kind: 'routine', label: late ? 'Rotina adiada' : 'Casa e refeições' });
-        blocks.push({ day, start: 8, end: 9, kind: 'commute', label: 'Trajeto' });
-        blocks.push({ day, start: 9, end: 12, kind: 'work', label: 'Trabalho' });
-        blocks.push({ day, start: 13, end: 18, kind: 'work', label: 'Trabalho' });
-        blocks.push({ day, start: 18, end: 19, kind: 'commute', label: 'Trajeto' });
+        // O almoço é intervalo, fora das 8h trabalhadas.
+        add(day, 8, 9, 'commute', 'Ônibus', 'Nesse horário você está no ônibus.');
+        add(day, 9, 12, 'work', 'Trabalho', 'Nesse horário você está no trabalho.');
+        add(day, 12, 13, 'routine', 'Almoço', 'É o intervalo de almoço do trabalho.');
+        add(day, 13, 18, 'work', 'Trabalho', 'Nesse horário você está no trabalho.');
+        add(day, 18, 19, 'commute', 'Ônibus', 'Nesse horário você está no ônibus.');
+        if (late) add(day, 20, 21, 'routine', 'Janta', 'Com o atraso, a janta e a casa passaram para as 20h.');
+        else add(day, 19, 20, 'routine', 'Janta', 'É a hora da janta e das coisas de casa.');
       } else {
-        blocks.push({ day, start: 17, end: 19, kind: 'routine', label: 'Casa e refeições' });
         if (hours === 4) {
-          blocks.push({ day, start: 8, end: 9, kind: 'commute', label: 'Trajeto' });
-          blocks.push({ day, start: 9, end: 13, kind: 'work', label: 'Trabalho' });
-          blocks.push({ day, start: 13, end: 14, kind: 'commute', label: 'Trajeto' });
+          add(day, 8, 9, 'commute', 'Ônibus', 'Nesse horário você está no ônibus.');
+          add(day, 9, 13, 'work', 'Trabalho', 'Nesse horário você está no trabalho.');
+          add(day, 13, 14, 'commute', 'Ônibus', 'Nesse horário você está no ônibus.');
         }
+        add(day, 17, 19, 'routine', 'Casa', 'É a hora de cuidar da casa e da janta.');
       }
     }
     if (eventActive) blocks.push({ ...EVENT });
     return blocks;
   }
+
   function checkPlacement(round, placements, eventActive, id, day, start) {
     const task = taskById(id);
     if (!task || !Number.isInteger(day) || day < 0 || day > 6 || !Number.isInteger(start)) {
-      return { ok: false, reason: 'Escolha uma atividade, um dia e um horário.' };
+      return { ok: false, code: 'invalid', reason: 'Escolha um plano, um dia e um horário.' };
     }
     const item = { id, day, start, end: start + task.hours };
     if (!task.days.includes(day) || start < task.from || item.end > task.to) {
-      return { ok: false, reason: task.note };
+      return { ok: false, code: 'window', reason: `${task.short}: só ${windowText(task)}.` };
     }
-    const blocks = fixedBlocks(round, eventActive).concat(placements.filter(p => p.id !== id));
-    const conflict = blocks.find(b => b.day === day && overlaps(item, b));
-    if (conflict) {
-      const label = conflict.id ? taskById(conflict.id).name : conflict.label;
-      return { ok: false, reason: `Esse horário coincide com ${label.toLowerCase()}.` };
+    const fixed = fixedBlocks(round, eventActive).find(b => b.day === day && overlaps(item, b));
+    if (fixed) return { ok: false, code: fixed.kind, blocker: fixed, reason: fixed.reason };
+    const plan = placements.find(p => p.id !== id && p.day === day && overlaps(item, p));
+    if (plan) {
+      const other = taskById(plan.id);
+      return { ok: false, code: 'plan', blocker: plan, reason: `Já tem ${other.emoji} ${other.name} nesse horário.` };
     }
     return { ok: true, placement: item };
   }
+
   function options(round, placements, eventActive, id, day) {
     const task = taskById(id);
     if (!task) return [];
@@ -75,16 +103,58 @@
     }
     return starts;
   }
+  const allOptions = (round, placements, eventActive, id) =>
+    ALL.flatMap(day => options(round, placements, eventActive, id, day).map(start => ({ day, start })));
+
+  // Início que cobre a hora tocada, com o bloco o mais centrado possível no toque.
+  function resolveStart(round, placements, eventActive, id, day, hour) {
+    const task = taskById(id);
+    if (!task) return null;
+    const covering = options(round, placements, eventActive, id, day).filter(s => s <= hour && hour < s + task.hours);
+    if (!covering.length) return null;
+    const target = hour + 0.5 - task.hours / 2;
+    return covering.reduce((best, s) => (Math.abs(s - target) < Math.abs(best - target) ? s : best));
+  }
+
+  // Por que um plano não tem nenhum horário na semana inteira.
+  function whyNoRoom(round, placements, eventActive, id) {
+    const task = taskById(id);
+    if (!task || allOptions(round, placements, eventActive, id).length) return null;
+    const others = placements.filter(p => p.id !== id);
+    if (allOptions(round, [], eventActive, id).length) {
+      const blockers = new Set();
+      for (const day of task.days) for (let s = task.from; s <= task.to - task.hours; s++) {
+        const check = checkPlacement(round, others, eventActive, id, day, s);
+        if (check.code === 'plan') blockers.add(check.blocker.id);
+      }
+      const names = [...blockers].map(b => `${taskById(b).emoji} ${taskById(b).name}`);
+      return `Sem espaço: ${daysText(task)} já tem ${joinList(names)}. Mova ou tire um plano.`;
+    }
+    return `Na ${SCENARIOS[round].scale} não cabe: ${windowText(task)}, você está no trabalho ou no ônibus.`;
+  }
+
   function put(round, placements, eventActive, id, day, start) {
     const result = checkPlacement(round, placements, eventActive, id, day, start);
     return result.ok ? { ...result, placements: [...placements.filter(p => p.id !== id), result.placement] } : result;
   }
+
   function applyEvent(placements) {
-    // Arriving at 20h shifts the one-hour evening routine to 20h–21h.
-    const displacedRoutine = { start: 20, end: 21 };
-    const removed = placements.filter(p => p.day === EVENT.day && overlaps(p, displacedRoutine));
+    // Chegando às 20h, a hora de janta e casa passa para 20h–21h.
+    const displaced = { start: 20, end: 21 };
+    const removed = placements.filter(p => p.day === EVENT.day && overlaps(p, displaced));
     return { removed, placements: placements.filter(p => !removed.includes(p)) };
   }
+
+  // A semana 2 começa com os encaixes da semana 1 (a 5×2 só libera horas; nada da 6×1 deixa de caber).
+  function carryOver(placements) {
+    const kept = [];
+    for (const p of placements) {
+      const result = checkPlacement(1, kept, true, p.id, p.day, p.start);
+      if (result.ok) kept.push(result.placement);
+    }
+    return kept;
+  }
+
   function stats(round, placements, eventActive = true) {
     const scenario = SCENARIOS[round];
     const available = 168 - 56 - 21 - scenario.workHours - scenario.commuteHours - Number(eventActive);
@@ -93,6 +163,29 @@
       event: Number(eventActive), available, planned, unallocated: available - planned, count: placements.length,
       left: TASKS.filter(t => !placements.some(p => p.id === t.id)).map(t => t.id) };
   }
+
+  // Maior número de planos que cabem juntos (busca exaustiva com poda; o espaço é pequeno).
+  const maxCache = {};
+  function maxPlans(round, eventActive = true) {
+    const key = `${round}:${eventActive}`;
+    if (maxCache[key]) return maxCache[key];
+    const lists = TASKS.map(t => allOptions(round, [], eventActive, t.id).map(o => ({ id: t.id, day: o.day, start: o.start, end: o.start + t.hours })))
+      .sort((a, b) => a.length - b.length);
+    let best = [];
+    const chosen = [];
+    (function search(i) {
+      if (best.length === TASKS.length || chosen.length + (lists.length - i) <= best.length) return;
+      if (i === lists.length) { best = chosen.slice(); return; }
+      for (const p of lists[i]) {
+        if (chosen.some(c => c.day === p.day && overlaps(c, p))) continue;
+        chosen.push(p); search(i + 1); chosen.pop();
+      }
+      search(i + 1);
+    })(0);
+    maxCache[key] = { count: best.length, placements: best };
+    return maxCache[key];
+  }
+
   function validateSave(data) {
     if (!data || data.version !== 2 || !['intro', 'playing', 'intermission', 'results'].includes(data.mode)) return null;
     if (![0, 1].includes(data.round) || !Array.isArray(data.weeks) || data.weeks.length !== 2 ||
@@ -112,5 +205,29 @@
     }
     return { version: 2, mode: data.mode, round: data.round, weeks: data.weeks.map(w => w.map(p => ({ id: p.id, day: p.day, start: p.start, end: p.end }))), events: [...data.events] };
   }
-  return { DAYS, SHORT_DAYS, SCENARIOS, TASKS, EVENT, taskById, overlaps, fixedBlocks, checkPlacement, options, put, applyEvent, stats, validateSave };
+
+  // Linha de dias com as cores de cada semana: verde e amarelo na 6×1; vermelho e estrela na 5×2.
+  const STRIP = [['🟩', '🟨'], ['🟥', '⭐']];
+  const dayStrip = round => SCENARIOS[round].hoursPerDay.map(h => STRIP[round][h ? 0 : 1]).join('');
+  function leftOutSentence(round, placements) {
+    const left = TASKS.filter(t => !placements.some(p => p.id === t.id));
+    if (!left.length) return '';
+    return `Na ${SCENARIOS[round].scale}, ${left.length === 1 ? 'ficou' : 'ficaram'} de fora ${joinList(left.map(t => t.out))}.`;
+  }
+  function shareText(weeks, url = SITE_URL) {
+    const fit = round => TASKS.filter(t => weeks[round].some(p => p.id === t.id)).map(t => t.emoji).join('');
+    const lines = ['FOLGA · Sua vida cabe na 6×1?', ''];
+    for (const round of [0, 1]) {
+      lines.push(`${SCENARIOS[round].scale} ${dayStrip(round)}`);
+      lines.push(`coube ${weeks[round].length} de 8 ${fit(round)}`.trim(), '');
+    }
+    const out = leftOutSentence(0, weeks[0]);
+    if (out) lines.push(out);
+    lines.push(`E a sua semana? ${url}`);
+    return lines.join('\n');
+  }
+
+  return { DAYS, SHORT_DAYS, FIRST_HOUR, LAST_HOUR, SITE_URL, SCENARIOS, TASKS, EVENT, offDays, taskById, overlaps,
+    joinList, daysText, windowText, capitalize, fixedBlocks, checkPlacement, options, allOptions, resolveStart, whyNoRoom,
+    put, applyEvent, carryOver, stats, maxPlans, validateSave, dayStrip, leftOutSentence, shareText };
 });

@@ -1,377 +1,689 @@
+// FOLGA — interface: telas, calendário em canvas, bandeja de planos, salvamento,
+// resultado e compartilhamento (imagem para Stories/WhatsApp, link do WhatsApp e texto).
 (() => {
   'use strict';
   const E = window.FolgaEngine;
   const $ = id => document.getElementById(id);
   const KEY = 'folga-game-v2';
+  const FIRST = E.FIRST_HOUR, LAST = E.LAST_HOUR, ROWS = LAST - FIRST;
+  const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
+  const EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
+  const DISPLAY = "Anton, Impact, 'Arial Narrow', sans-serif";
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const fresh = () => ({ version: 2, mode: 'intro', round: 0, weeks: [[], []], events: [false, false] });
-  let state = fresh(), storageOK = true, selected = null, day = 0, history = [], statusText = 'Por onde você quer começar?', statusError = false;
-  let board = null, drag = null, hover = null, eventAfter = null, resumeMode = null, mobileView = 'plans';
+
+  let state = fresh(), storageOK = true, resumeMode = null;
+  let selected = null, history = [], statusText = '', statusTone = '';
+  let pointer = null, hover = null, pop = null, geo = null, suppressClick = false, eventAfter = null;
+  const share = { ready: null, file: null, url: '', text: '' };
+
   try {
-    const raw = localStorage.getItem(KEY);
-    $('schedule-update').hidden = Boolean(raw) || !localStorage.getItem('folga-game-v1');
     let saved = null;
-    try { saved = JSON.parse(raw || 'null'); } catch { /* An invalid save starts a new game. */ }
+    try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { /* Save inválido: começa do zero. */ }
     state = E.validateSave(saved) || fresh();
   } catch { storageOK = false; }
   if (state.mode !== 'intro') { resumeMode = state.mode; state.mode = 'intro'; }
-  const canvas = $('week-canvas'), ctx = canvas.getContext('2d');
-  const narrow = () => window.matchMedia('(max-width: 760px)').matches;
+
+  const board = $('board');
   const placements = () => state.weeks[state.round];
   const activeEvent = () => state.events[state.round];
-  const formatHour = hour => `${hour}h`;
-  const timeRange = (start, end) => `${start}h–${end}h`;
+  const range = (a, b) => `${a}h–${b}h`;
+  const isWide = () => window.matchMedia('(min-width: 820px)').matches;
+
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify({ ...state, mode: resumeMode || state.mode })); }
     catch { storageOK = false; }
   }
-  function message(text, error = false) {
-    statusText = text; statusError = error;
-    $('status').textContent = text; $('status').classList.toggle('error', error);
+
+  // Cores: só tokens do CSS.
+  let T = null;
+  function theme() {
+    if (T) return T;
+    const cs = getComputedStyle(document.documentElement);
+    const v = name => cs.getPropertyValue(`--${name}`).trim();
+    const week = r => ({ main: v(`r${r}-main`), deep: v(`r${r}-deep`), on: v(`r${r}-on`), soft: v(`r${r}-soft`), head: v(`r${r}-head`), headInk: v(`r${r}-head-ink`) });
+    T = { paper: v('paper'), card: v('card'), ink: v('ink'), muted: v('muted'), line: v('line'), board: v('board'), grid: v('grid'),
+      hourInk: v('hour-ink'), dayInk: v('day-ink'), work: v('work'), workInk: v('work-ink'), workHatch: v('work-hatch'),
+      commute: v('commute'), routine: v('routine'), routineInk: v('routine-ink'), event: v('event'), slot: v('slot'),
+      slotFill: v('slot-fill'), bad: v('bad'), badFill: v('bad-fill'), planInk: v('plan-ink'), shadow: v('shadow'),
+      yellow: v('r0-yellow'), navy: v('r0-navy'), week: [week(0), week(1)],
+      plan: Object.fromEntries(E.TASKS.map(t => [t.id, v(`plan-${t.id}`)])) };
+    return T;
   }
-  function focusHeading() {
-    const target = state.mode === 'playing' ? $('week-title') : $(state.mode).querySelector('h1');
-    target.tabIndex = -1; target.focus({ preventScroll: true });
-    window.scrollTo({ top: 0, behavior: 'instant' });
+
+  // ---------- Desenho de uma semana (tabuleiro, miniaturas e imagem de compartilhamento) ----------
+  function rr(g, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    g.beginPath(); g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
   }
-  function closeDialog(dialog) { if (dialog && dialog.open) dialog.close(); }
-  function showDialog(id) { if (!$(`${id}`).open) $(id).showModal(); }
-  function possible(id, targetDay) { return E.options(state.round, placements(), activeEvent(), id, targetDay); }
-  function selectTask(id, shouldScroll = true) {
-    selected = id;
-    if (!possible(id, day).length) {
-      const first = E.DAYS.findIndex((_, d) => possible(id, d).length);
-      day = first >= 0 ? first : E.taskById(id).days[0];
+  function emojiAt(g, text, x, y, size) {
+    if (size < 7) return;
+    g.font = `${Math.round(size)}px ${EMOJI}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, x, y + size * .06);
+  }
+  function paintWeek(g, W, H, round, list, eventActive, o = {}) {
+    const C = theme(), wk = C.week[round], s = o.scale || 1;
+    const gx = o.hours ? (o.gutter || 24) : 0, gy = o.headerH || 18;
+    const cw = (W - gx) / 7, rh = (H - gy) / ROWS;
+    const inset = Math.max(1, Math.min(2.2 * s, cw * .05)), rad = Math.min(5 * s, cw / 6);
+    const off = E.offDays(round);
+    const box = b => ({ x: gx + b.day * cw + inset, y: gy + (b.start - FIRST) * rh + inset, w: cw - 2 * inset, h: (b.end - b.start) * rh - 2 * inset });
+    g.save();
+    g.fillStyle = C.board; g.fillRect(0, 0, W, H);
+    for (const d of off) { g.fillStyle = wk.soft; g.fillRect(gx + d * cw, gy, cw, ROWS * rh); }
+    g.strokeStyle = C.grid; g.lineWidth = Math.max(1, s * .8);
+    for (let h = 0; h <= ROWS; h++) { const y = Math.round(gy + h * rh) + .5; g.beginPath(); g.moveTo(gx, y); g.lineTo(W, y); g.stroke(); }
+    if (o.hours) {
+      g.fillStyle = C.hourInk; g.font = `${Math.round(9.5 * s)}px ${SANS}`; g.textAlign = 'right'; g.textBaseline = 'middle';
+      const every = rh >= 14 * s ? 1 : 2;
+      for (let h = 0; h < ROWS; h += every) g.fillText(`${FIRST + h}h`, gx - 4 * s, gy + (h + .5) * rh);
     }
-    const task = E.taskById(id);
-    message(`${task.name}: ${task.note}`);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let d = 0; d < 7; d++) {
+      const x = gx + d * cw, label = o.letters ? E.SHORT_DAYS[d][0] : E.SHORT_DAYS[d];
+      if (off.includes(d)) { g.fillStyle = wk.head; rr(g, x + inset, inset, cw - 2 * inset, gy - 2 * inset, rad); g.fill(); g.fillStyle = wk.headInk; }
+      else g.fillStyle = C.dayInk;
+      g.font = `800 ${Math.round((o.dayFont || 9.5) * s)}px ${SANS}`;
+      g.fillText(label, x + cw / 2, gy / 2 + .5);
+    }
+    for (const b of E.fixedBlocks(round, eventActive)) {
+      const r = box(b);
+      g.fillStyle = { work: C.work, commute: C.commute, routine: C.routine, event: C.event }[b.kind];
+      rr(g, r.x, r.y, r.w, r.h, rad); g.fill();
+      if (b.kind === 'work') {
+        g.save(); rr(g, r.x, r.y, r.w, r.h, rad); g.clip(); g.strokeStyle = C.workHatch; g.lineWidth = s;
+        for (let k = -r.h; k < r.w; k += 7 * s) { g.beginPath(); g.moveTo(r.x + k, r.y + r.h); g.lineTo(r.x + k + r.h, r.y); g.stroke(); }
+        g.restore();
+        if (o.labels && r.h > 18 * s) {
+          g.fillStyle = C.workInk; g.font = `600 ${Math.round(10 * s)}px ${SANS}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+          if (g.measureText(b.label).width < r.w - 4) g.fillText(b.label, r.x + r.w / 2, r.y + r.h / 2);
+        }
+      } else if (b.kind === 'commute' || b.kind === 'event') {
+        emojiAt(g, b.kind === 'event' ? '⏳' : '🚌', r.x + r.w / 2, r.y + r.h / 2, Math.min(r.h * .72, r.w * .5, 15 * s));
+      } else if (o.labels && r.h > 12 * s) {
+        g.fillStyle = C.routineInk; g.font = `600 ${Math.round(9.5 * s)}px ${SANS}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        if (g.measureText(b.label).width < r.w - 4) g.fillText(b.label, r.x + r.w / 2, r.y + r.h / 2);
+      }
+    }
+    for (const p of list) {
+      const r = box(p), t = E.taskById(p.id);
+      const k = o.pop && o.pop.id === p.id ? o.pop.k : 1;
+      g.save();
+      g.translate(r.x + r.w / 2, r.y + r.h / 2); g.scale(k, k); g.translate(-(r.x + r.w / 2), -(r.y + r.h / 2));
+      g.fillStyle = C.plan[p.id]; rr(g, r.x, r.y, r.w, r.h, rad); g.fill();
+      if (o.selected === p.id) { g.lineWidth = 2.5 * s; g.strokeStyle = C.ink; g.stroke(); }
+      const es = Math.min(r.h * .55, r.w * .6, (o.emoji || 20) * s);
+      const named = o.labels && r.h >= es + 18 * s && r.w >= 44 * s;
+      emojiAt(g, t.emoji, r.x + r.w / 2, r.y + r.h / 2 - (named ? 7 * s : 0), es);
+      if (named) {
+        g.fillStyle = C.planInk; g.font = `800 ${Math.round(10.5 * s)}px ${SANS}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(t.short, r.x + r.w / 2, r.y + r.h / 2 + es / 2 + 3 * s);
+      }
+      g.restore();
+    }
+    if (o.region) {
+      for (const seg of o.region) {
+        const r = box(seg);
+        g.fillStyle = C.slotFill; rr(g, r.x, r.y, r.w, r.h, rad); g.fill();
+        g.setLineDash([4 * s, 3 * s]); g.strokeStyle = C.slot; g.lineWidth = 1.6 * s; g.stroke(); g.setLineDash([]);
+      }
+    }
+    if (o.preview) {
+      const r = box(o.preview), t = E.taskById(o.preview.id);
+      g.globalAlpha = .9; g.fillStyle = o.preview.ok ? C.plan[t.id] : C.badFill; rr(g, r.x, r.y, r.w, r.h, rad); g.fill(); g.globalAlpha = 1;
+      g.setLineDash([5 * s, 3 * s]); g.lineWidth = 2 * s; g.strokeStyle = o.preview.ok ? C.ink : C.bad; g.stroke(); g.setLineDash([]);
+      emojiAt(g, t.emoji, r.x + r.w / 2, r.y + r.h / 2, Math.min(r.h * .55, r.w * .6, 20 * s));
+    }
+    g.restore();
+    return { gx, gy, cw, rh };
+  }
+  function fitCanvas(c) {
+    const rect = c.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const w = Math.max(1, Math.round(rect.width * dpr)), h = Math.max(1, Math.round(rect.height * dpr));
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { g, W: rect.width, H: rect.height };
+  }
+
+  // ---------- Tabuleiro ----------
+  function regionFor(id) {
+    const t = E.taskById(id), segs = [];
+    for (let d = 0; d < 7; d++) {
+      let cur = null;
+      for (const s of E.options(state.round, placements(), activeEvent(), id, d)) {
+        if (cur && s <= cur.end) cur.end = Math.max(cur.end, s + t.hours);
+        else { cur = { day: d, start: s, end: s + t.hours }; segs.push(cur); }
+      }
+    }
+    return segs;
+  }
+  function centeredStart(id, hour) {
+    const t = E.taskById(id);
+    return Math.min(Math.max(Math.round(hour + .5 - t.hours / 2), FIRST), LAST - t.hours);
+  }
+  function previewFor(id, pt) {
+    const t = E.taskById(id), s = E.resolveStart(state.round, placements(), activeEvent(), id, pt.day, pt.hour);
+    if (s !== null) return { id, day: pt.day, start: s, end: s + t.hours, ok: true };
+    const start = centeredStart(id, pt.hour);
+    return { id, day: pt.day, start, end: start + t.hours, ok: false };
+  }
+  function drawBoard() {
+    if (state.mode !== 'playing') return;
+    const { g, W, H } = fitCanvas(board);
+    if (W < 20 || H < 20) return;
+    const big = W >= 520;
+    const dragId = pointer && pointer.moved ? pointer.id : null, focusId = dragId || selected;
+    let popK = null;
+    if (pop) {
+      const p = Math.min(1, (performance.now() - pop.t0) / 240);
+      popK = { id: pop.id, k: .72 + .28 * (1 - Math.pow(1 - p, 3)) + Math.sin(p * Math.PI) * .08 };
+    }
+    geo = paintWeek(g, W, H, state.round, placements(), activeEvent(), {
+      hours: true, gutter: big ? 36 : 24, headerH: big ? 28 : 18, labels: big, scale: big ? 1.1 : 1, emoji: big ? 22 : 18,
+      dayFont: big ? 10 : 9.5, selected, region: focusId ? regionFor(focusId) : null,
+      preview: focusId && hover ? previewFor(focusId, hover) : null, pop: popK });
+  }
+  function animatePop() {
+    drawBoard();
+    if (pop && performance.now() - pop.t0 < 240) requestAnimationFrame(animatePop);
+    else { pop = null; drawBoard(); }
+  }
+  function boardPoint(clientX, clientY) {
+    if (!geo) return null;
+    const rect = board.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top;
+    const day = Math.floor((x - geo.gx) / geo.cw), hour = FIRST + Math.floor((y - geo.gy) / geo.rh);
+    if (x > rect.width || day < 0 || day > 6 || hour < FIRST || hour >= LAST) return null;
+    return { day, hour };
+  }
+  const planAt = pt => placements().find(p => p.day === pt.day && pt.hour >= p.start && pt.hour < p.end);
+  const fixedAt = pt => E.fixedBlocks(state.round, activeEvent()).find(b => b.day === pt.day && pt.hour >= b.start && pt.hour < b.end);
+
+  // ---------- Ações ----------
+  function say(text, tone = '', animate = true) {
+    statusText = text; statusTone = tone;
+    const el = $('status');
+    el.textContent = text;
+    el.className = `status${tone ? ` ${tone}` : ''}`;
+    if (animate && tone === 'error' && !reduceMotion) { void el.offsetWidth; el.classList.add('shake'); }
+  }
+  function select(id, fromKeyboard = false) {
+    selected = id;
+    const t = E.taskById(id), why = E.whyNoRoom(state.round, placements(), activeEvent(), id);
+    if (why) say(why, 'error');
+    else say(placements().some(p => p.id === id) ? `Para mover, toque em outro espaço verde. ${E.capitalize(E.windowText(t))}.` : `${E.capitalize(E.windowText(t))}. ${t.extra}`);
     renderGame();
-    if (shouldScroll && narrow()) $('placement-picker').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (fromKeyboard) { const p = $('picker'); (p.querySelector('.slot') || p.querySelector('.remove-button') || p.querySelector('.picker-close'))?.focus(); }
   }
-  function setDay(next) { day = next; renderGame(); }
-  function remember() { history.push(placements().map(p => ({ ...p }))); if (history.length > 30) history.shift(); }
-  function activateEvent(after = null) {
-    if (activeEvent()) return false;
-    const result = E.applyEvent(placements());
-    state.events[state.round] = true;
+  function deselect(message = 'Escolha outro plano quando quiser.') {
+    const id = selected; selected = null; say(message); renderGame();
+    return id;
+  }
+  function remember() { history.push(placements().map(p => ({ ...p }))); if (history.length > 40) history.shift(); }
+  function place(id, day, start) {
+    const result = E.put(state.round, placements(), activeEvent(), id, day, start);
+    if (!result.ok) { say(result.reason, 'error'); drawBoard(); return false; }
+    remember();
     state.weeks[state.round] = result.placements;
-    // Previous states may overlap the newly fixed event; start a new undo history.
-    history = [];
-    eventAfter = after;
-    $('event-impact').textContent = result.removed.length
-      ? `${result.removed.map(p => E.taskById(p.id).name).join(' e ')} voltou para os planos sem horário. Você pode tentar outro encaixe.`
-      : 'Seus planos já encaixados continuam no lugar. A quarta passa a ter uma hora a menos disponível.';
-    save(); renderGame(); showDialog('event-dialog');
-    return true;
-  }
-  function place(id, targetDay, start) {
-    const result = E.put(state.round, placements(), activeEvent(), id, targetDay, start);
-    if (!result.ok) { message(result.reason, true); draw(); return false; }
-    remember(); state.weeks[state.round] = result.placements; selected = null; day = targetDay;
-    message(`${E.taskById(id).name}: ${E.DAYS[targetDay].toLowerCase()}, ${timeRange(start, result.placement.end)}. Encaixou!`);
+    selected = null; hover = null;
+    const t = E.taskById(id), n = placements().length;
+    say(`${t.emoji} ${t.name}: ${E.DAYS[day].toLowerCase()}, ${range(start, start + t.hours)}.${n === 8 ? ' Coube tudo!' : ''}`, 'good');
     save(); renderGame();
-    if (!activeEvent() && placements().length >= 3) activateEvent();
+    const score = $('score'); score.classList.remove('bump'); void score.offsetWidth; score.classList.add('bump');
+    if (!reduceMotion) { pop = { id, t0: performance.now() }; requestAnimationFrame(animatePop); }
+    if (state.round === 0 && !activeEvent() && n >= 3) activateEvent();
     return true;
   }
-  function removeTask(id) {
+  function removePlan(id) {
     if (!placements().some(p => p.id === id)) return;
-    remember(); state.weeks[state.round] = placements().filter(p => p.id !== id); selected = null;
-    message(`${E.taskById(id).name} voltou para os planos sem horário.`); save(); renderGame();
+    remember();
+    state.weeks[state.round] = placements().filter(p => p.id !== id);
+    selected = null;
+    const t = E.taskById(id);
+    say(`${t.emoji} ${t.name} saiu da semana.`); save(); renderGame();
     document.querySelector(`[data-task="${id}"]`)?.focus({ preventScroll: true });
   }
   function undo() {
     if (!history.length) return;
     state.weeks[state.round] = history.pop(); selected = null;
-    message('Último encaixe desfeito.'); save(); renderGame();
+    say('Desfeito.'); save(); renderGame();
   }
-  function render() {
-    for (const mode of ['intro', 'game', 'intermission', 'results']) $(mode).hidden = mode !== (state.mode === 'playing' ? 'game' : state.mode);
-    if (state.mode === 'intro') {
-      $('start-button').innerHTML = resumeMode ? 'Continuar minha partida <span aria-hidden="true">↗</span>' : 'Vamos encontrar tempo <span aria-hidden="true">↗</span>';
-      $('fresh-button').hidden = !resumeMode;
-    } else if (state.mode === 'playing') renderGame();
-    else if (state.mode === 'intermission') renderFirst();
-    else renderResults();
+  function explainMiss(id, pt) {
+    const check = E.checkPlacement(state.round, placements(), activeEvent(), id, pt.day, centeredStart(id, pt.hour));
+    say(check.ok ? 'Solte dentro da área verde.' : check.reason, 'error'); drawBoard();
   }
-  function renderGame() {
-    $('game').dataset.mobileView = mobileView;
-    $('show-plans').setAttribute('aria-pressed', String(mobileView === 'plans'));
-    $('show-calendar').setAttribute('aria-pressed', String(mobileView === 'calendar'));
-    const scenario = E.SCENARIOS[state.round];
-    $('round-label').textContent = `SEMANA ${state.round + 1} DE 2 · ESCALA ${scenario.scale}`;
-    $('week-title').textContent = state.round ? 'Um dia a mais para você.' : 'Faça a semana caber.';
-    $('week-subtitle').textContent = `${scenario.workHours}h de trabalho · ${scenario.commuteHours}h de trajeto · ${state.round ? 'sábado e domingo de folga' : 'domingo de folga'}`;
-    $('progress-count').innerHTML = `${placements().length}<span>/8</span>`;
-    $('undo-button').disabled = history.length === 0;
-    $('day-tabs').innerHTML = E.SHORT_DAYS.map((label, d) => `<button class="day-tab ${d === day ? 'active' : ''} ${selected && possible(selected, d).length ? 'available' : ''}" data-day="${d}" aria-label="${E.DAYS[d]}" aria-pressed="${d === day}">${label}</button>`).join('');
-    $('tasks').innerHTML = E.TASKS.map(task => {
-      const p = placements().find(p => p.id === task.id);
-      return `<div class="task-row ${p ? 'placed' : ''} ${selected === task.id ? 'selected' : ''}" style="--task-color:${task.color}"><button class="task-main" data-task="${task.id}" aria-pressed="${selected === task.id}" aria-label="${task.name}, ${task.hours} horas${p ? `, ${E.DAYS[p.day]}, ${timeRange(p.start, p.end)}. Mover atividade` : '. Escolher horário'}"><span class="task-icon" aria-hidden="true">${task.icon}</span><span class="task-copy"><span class="task-name">${task.name}</span><span class="task-time">${p ? `${E.SHORT_DAYS[p.day]} · ${timeRange(p.start, p.end)}` : task.days.length === 7 ? 'Qualquer dia' : task.days.map(d => E.SHORT_DAYS[d]).join(' / ')}</span></span><span class="task-length" aria-hidden="true">${p ? '✓' : `${task.hours}h`}</span></button><button class="drag-handle" data-drag="${task.id}" aria-label="Arrastar ${task.name}; ou pressione Enter para escolher um horário">⠿</button></div>`;
-    }).join('');
-    renderPicker(); renderAgenda(); message(statusText, statusError); draw();
-  }
-  function renderPicker() {
-    const picker = $('placement-picker');
-    picker.hidden = !selected;
-    if (!selected) { picker.innerHTML = ''; return; }
-    const task = E.taskById(selected), slots = possible(selected, day);
-    const placed = placements().some(p => p.id === selected);
-    picker.innerHTML = `<h3>${task.name} · ${task.hours}h</h3><p>${task.note}</p><div class="picker-days" aria-label="Dia da atividade">${E.SHORT_DAYS.map((label, d) => `<button class="picker-day ${d === day ? 'active' : ''} ${possible(selected, d).length ? '' : 'no-slots'}" data-picker-day="${d}" aria-label="${E.DAYS[d]}${possible(selected, d).length ? ', com horários disponíveis' : ', sem encaixe disponível'}" aria-pressed="${d === day}">${label}</button>`).join('')}</div><p><b>${E.DAYS[day]}</b> · ${slots.length ? 'Começar às:' : 'Sem encaixe disponível.'}</p><div class="slot-buttons">${slots.map(start => `<button class="slot-button" data-start="${start}" aria-label="Encaixar ${task.name}, ${E.DAYS[day]}, das ${start} às ${start + task.hours} horas">${timeRange(start, start + task.hours)}</button>`).join('')}</div>${!slots.length ? '<p>Tente outro dia ou mova um plano já encaixado. Alguns planos podem ficar para depois.</p>' : ''}<div class="picker-meta">${placed ? `<button class="remove-button" data-remove="${task.id}">Retirar da semana</button>` : '<span></span>'}<button class="text-button" id="cancel-selection">Cancelar seleção</button></div>`;
-  }
-  function renderAgenda() {
-    $('agenda-text').innerHTML = E.DAYS.map((label, d) => {
-      const blocks = E.fixedBlocks(state.round, activeEvent()).concat(placements()).filter(p => p.day === d).sort((a, b) => a.start - b.start);
-      return `<h3>${label}</h3><ul>${blocks.map(b => `<li>${timeRange(b.start, b.end)}: ${b.id ? E.taskById(b.id).name : b.label}</li>`).join('')}<li>23h–7h: sono</li></ul>`;
-    }).join('');
-  }
-  function roundRect(x, y, width, height, radius = 4) {
-    ctx.beginPath(); ctx.roundRect(x, y, width, height, radius);
-  }
-  function textFit(text, maxWidth) {
-    if (ctx.measureText(text).width <= maxWidth) return text;
-    while (text && ctx.measureText(text + '…').width > maxWidth) text = text.slice(0, -1);
-    return text + '…';
-  }
-  function draw() {
-    if (state.mode !== 'playing') return;
-    const width = canvas.clientWidth, height = canvas.clientHeight;
-    if (!width) return;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const mobile = narrow(), shownDays = mobile ? [day] : [0, 1, 2, 3, 4, 5, 6];
-    const left = 30, top = mobile ? 28 : 30, bottom = 20, row = (height - top - bottom) / 16;
-    const col = (width - left - 4) / shownDays.length;
-    board = { width, height, left, top, row, col, shownDays, mobile };
-    ctx.fillStyle = '#fffef8'; ctx.fillRect(0, 0, width, height);
-    ctx.textBaseline = 'middle';
-    for (let n = 0; n < shownDays.length; n++) {
-      const d = shownDays[n], x = left + n * col;
-      ctx.fillStyle = d >= E.SCENARIOS[state.round].workDays ? '#f3f6e9' : '#faf9f2';
-      ctx.fillRect(x + 2, top, col - 4, row * 16);
-      ctx.fillStyle = '#526650'; ctx.font = mobile ? 'bold 11px Arial' : '10px Arial'; ctx.textAlign = 'center';
-      const dailyHours = E.SCENARIOS[state.round].hoursPerDay[d];
-      ctx.fillText(mobile ? E.DAYS[d].toUpperCase() : (dailyHours ? `${dailyHours}h trabalho` : 'FOLGA'), x + col / 2, 12);
-    }
-    for (let hour = 7; hour <= 23; hour++) {
-      const y = top + (hour - 7) * row;
-      ctx.strokeStyle = '#e9ebdf'; ctx.lineWidth = .7; ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - 3, y); ctx.stroke();
-      ctx.fillStyle = '#758173'; ctx.font = '9px Arial'; ctx.textAlign = 'right'; ctx.fillText(`${hour}h`, left - 7, y + 1);
-    }
-    const colors = { work: '#d8d2e7', commute: '#eac5a4', routine: '#e8e9e1', event: '#e7a17e' };
-    const blocks = E.fixedBlocks(state.round, activeEvent()).concat(placements().map(p => ({ ...p, kind: 'plan' })));
-    for (const b of blocks) {
-      const n = shownDays.indexOf(b.day); if (n === -1) continue;
-      const x = left + n * col + 3, y = top + (b.start - 7) * row + 1, w = col - 6, h = (b.end - b.start) * row - 2;
-      const task = b.id && E.taskById(b.id);
-      ctx.fillStyle = task ? task.color : colors[b.kind]; roundRect(x, y, w, h, 3); ctx.fill();
-      if (b.kind === 'work') {
-        ctx.save(); roundRect(x, y, w, h, 3); ctx.clip(); ctx.strokeStyle = '#ffffff38'; ctx.lineWidth = 1;
-        for (let offset = -h; offset < w + h; offset += 9) { ctx.beginPath(); ctx.moveTo(x + offset, y + h); ctx.lineTo(x + offset + h, y); ctx.stroke(); }
-        ctx.restore();
-      }
-      if (task && selected === task.id) { ctx.strokeStyle = '#234736'; ctx.lineWidth = 2; roundRect(x + 1, y + 1, w - 2, h - 2, 3); ctx.stroke(); }
-      ctx.fillStyle = '#344936'; ctx.textAlign = 'center'; ctx.font = `${task ? 'bold ' : ''}${mobile ? 11 : 9}px Arial`;
-      const label = task ? (mobile ? task.name : task.short) : (b.kind === 'routine' && !mobile ? (b.start === 12 ? 'Almoço' : 'Rotina') : b.label);
-      const midY = y + h / 2;
-      ctx.fillText(textFit(label, w - 7), x + w / 2, h > 44 ? midY - 7 : midY);
-      if (h > 44) { ctx.font = `${mobile ? 10 : 8}px Arial`; ctx.fillStyle = '#57674f'; ctx.fillText(timeRange(b.start, b.end), x + w / 2, midY + 10); }
-    }
+  function tapBoard(pt) {
+    if (!pt) return;
+    const plan = planAt(pt);
     if (selected) {
-      for (const d of shownDays) {
-        const n = shownDays.indexOf(d);
-        for (const start of possible(selected, d)) {
-          const x = left + n * col + 4, y = top + (start - 7) * row + 2;
-          ctx.fillStyle = '#c3da8659'; roundRect(x, y, col - 8, row - 4, 3); ctx.fill();
-          ctx.strokeStyle = '#719146'; ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
-          ctx.fillStyle = '#3d642f'; ctx.textAlign = 'center'; ctx.font = mobile ? '10px Arial' : '9px Arial';
-          ctx.fillText(mobile ? `+ começar às ${start}h` : '+', x + (col - 8) / 2, y + (row - 4) / 2);
-        }
-      }
+      const start = E.resolveStart(state.round, placements(), activeEvent(), selected, pt.day, pt.hour);
+      if (start !== null && !(plan && plan.id === selected && plan.start === start)) { place(selected, pt.day, start); return; }
+      if (plan && plan.id !== selected) { select(plan.id); return; }
+      if (plan) { deselect('Plano no mesmo lugar.'); return; }
+      explainMiss(selected, pt); return;
     }
-    if (hover && drag) {
-      const n = shownDays.indexOf(hover.day), task = E.taskById(drag.id);
-      if (n >= 0) {
-        const valid = E.checkPlacement(state.round, placements(), activeEvent(), drag.id, hover.day, hover.start).ok;
-        const y = top + (hover.start - 7) * row;
-        ctx.save(); ctx.beginPath(); ctx.rect(left, top, width - left, row * 16); ctx.clip();
-        ctx.fillStyle = valid ? '#3e795350' : '#b3523e50'; ctx.fillRect(left + n * col + 3, y, col - 6, task.hours * row);
-        ctx.restore();
-      }
-    }
+    if (plan) { select(plan.id); return; }
+    const fixed = fixedAt(pt);
+    say(fixed ? `${fixed.reason} Escolha um plano e toque num espaço livre.` : 'Escolha um plano e toque num espaço livre.');
   }
-  function boardPoint(clientX, clientY) {
-    if (!board) return null;
-    const rect = canvas.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top;
-    const colIndex = Math.floor((x - board.left) / board.col);
-    if (colIndex < 0 || colIndex >= board.shownDays.length || y < board.top || y >= board.top + 16 * board.row) return null;
-    return { day: board.shownDays[colIndex], start: 7 + Math.floor((y - board.top) / board.row) };
+  function drop(id, pt) {
+    hover = null;
+    if (!pt) { say('Solte o plano dentro do calendário.', 'error'); renderGame(); return; }
+    const start = E.resolveStart(state.round, placements(), activeEvent(), id, pt.day, pt.hour);
+    if (start !== null) place(id, pt.day, start);
+    else { selected = id; renderGame(); explainMiss(id, pt); }
   }
-  function renderFirst() {
-    const stats = E.stats(0, state.weeks[0]);
-    $('first-result').innerHTML = `<div class="first-summary"><span class="big-count">${stats.count}<small>/8</small></span><p>planos encontraram um lugar na semana.<br>${stats.left.length ? 'Nem tudo precisa virar obrigação. Veja o que ficou sem horário.' : 'Todos os planos encontraram um horário.'}</p></div>${stats.left.length ? `<div class="left-plans">${stats.left.map(id => `<span class="plan-pill">${E.taskById(id).name}</span>`).join('')}</div>` : ''}`;
-  }
-  function resultCard(round) {
-    const s = E.stats(round, state.weeks[round]);
-    return `<article class="result-card ${round ? 'second' : ''}"><div class="result-card-top"><span>${round ? 'DUAS FOLGAS' : 'UMA FOLGA'}</span><strong>${E.SCENARIOS[round].scale}</strong></div><span class="big-count">${s.count}<small>/8</small></span><p>planos encaixados · ${s.planned}h</p><div class="result-squares" aria-hidden="true">${Array.from({ length: 8 }, (_, i) => `<i class="${i < s.count ? '' : 'empty'}"></i>`).join('')}</div><p>${s.available}h disponíveis na semana<br>${s.unallocated}h continuaram sem plano</p></article>`;
-  }
-  function renderResults() {
-    const a = E.stats(0, state.weeks[0]), b = E.stats(1, state.weeks[1]);
-    $('time-gain').textContent = `+${b.available - a.available}h`;
-    $('time-gain-description').textContent = `Neste cenário: ${a.work - b.work}h a menos de trabalho + ${a.commute - b.commute}h a menos de trajeto. O sábado passa a ser um dia inteiro sem trabalho.`;
-    const diff = b.count - a.count;
-    $('results-lead').textContent = diff > 0 ? `Na segunda semana, você encaixou ${diff} ${diff === 1 ? 'plano a mais' : 'planos a mais'}. Veja o que mudou na sua organização.` : diff === 0 ? 'Você encaixou a mesma quantidade de planos nas duas semanas. Veja como o tempo disponível mudou.' : 'Você encaixou menos planos na segunda semana. Ter mais tempo disponível permite outros encaixes, mas as escolhas também contam.';
-    $('comparison').innerHTML = resultCard(0) + resultCard(1);
-    $('plan-comparison').innerHTML = `<table class="plan-table"><caption class="eyebrow">O QUE ENCONTROU LUGAR</caption><thead><tr><th scope="col">SEUS PLANOS</th><th scope="col">6×1</th><th scope="col">5×2</th></tr></thead><tbody>${E.TASKS.map(task => `<tr><th scope="row">${task.name}</th>${[0, 1].map(r => { const p = state.weeks[r].find(item => item.id === task.id); return `<td class="${p ? 'included' : 'excluded'}">${p ? `✓ ${E.SHORT_DAYS[p.day]} ${p.start}h` : 'Ficou de fora'}</td>`; }).join('')}</tr>`).join('')}</tbody></table>`;
-    const rows = [['Trabalho', 'work'], ['Deslocamento', 'commute'], ['Sono', 'sleep'], ['Rotina básica', 'routine'], ['Imprevisto', 'event'], ['Disponíveis para planos', 'available'], ['Horas planejadas por você', 'planned'], ['Horas disponíveis sem plano', 'unallocated']];
-    $('hours-table').innerHTML = `<table class="hours-table"><thead><tr><th scope="col">168h NA SEMANA</th><th scope="col">6×1</th><th scope="col">5×2</th></tr></thead><tbody>${rows.map(([name, key]) => `<tr><th scope="row">${name}</th><td>${a[key]}h</td><td>${b[key]}h</td></tr>`).join('')}</tbody></table>`;
+
+  function activateEvent(after = null) {
+    if (activeEvent()) return false;
+    const result = E.applyEvent(placements());
+    state.events[state.round] = true;
+    state.weeks[state.round] = result.placements;
+    // Estados anteriores podem colidir com o atraso: o desfazer recomeça.
+    history = []; eventAfter = after; selected = null;
+    $('event-impact').textContent = result.removed.length
+      ? `${result.removed.map(p => `${E.taskById(p.id).emoji} ${E.taskById(p.id).name}`).join(' e ')} perdeu o horário e voltou para a lista.`
+      : 'Seus planos continuam no lugar. Só sobrou menos tempo na quarta.';
+    save(); renderGame(); openDialog('event-dialog');
+    return true;
   }
   function askFinish() {
-    if (!activeEvent()) { activateEvent('finish'); return; }
-    const count = placements().length;
-    $('finish-detail').textContent = `Você encaixou ${count} de 8 planos. ${count < 8 ? 'Os que ficaram de fora aparecerão na comparação. Você pode continuar tentando ou seguir com essa semana.' : 'Todos encontraram um lugar. Vamos ver o resultado?'}`;
-    showDialog('finish-dialog');
+    if (state.round === 0 && !activeEvent()) { activateEvent('finish'); return; }
+    const n = placements().length;
+    if (n === 8) { finish(); return; }
+    const left = E.TASKS.filter(t => !placements().some(p => p.id === t.id)).map(t => `${t.emoji} ${t.name}`);
+    $('finish-detail').textContent = `Coube ${n} de 8. Fica de fora: ${E.joinList(left)}.`;
+    openDialog('finish-dialog');
   }
   function finish() {
-    closeDialog($('finish-dialog')); state.mode = state.round ? 'results' : 'intermission';
+    closeDialog($('finish-dialog'));
+    state.mode = state.round ? 'results' : 'intermission';
     selected = null; history = []; save(); render(); focusHeading();
+  }
+  function nextWeek() {
+    state.round = 1;
+    state.weeks[1] = E.carryOver(state.weeks[0]);
+    state.events[1] = true;
+    state.mode = 'playing'; selected = null; history = [];
+    say('O sábado agora é livre. Encaixe o que ficou de fora; dá para mover o que já está na semana.');
+    save(); render(); focusHeading();
   }
   function start() {
     if (resumeMode) { state.mode = resumeMode; resumeMode = null; }
     else state.mode = 'playing';
+    if (state.mode === 'playing' && !statusText) say(firstHint());
     save(); render(); focusHeading();
-    if (!storageOK && state.mode === 'playing') message('Seu navegador não permitiu salvar. Você pode jogar normalmente enquanto esta página estiver aberta.');
+    if (!storageOK && state.mode === 'playing') say('Seu navegador não deixou salvar. Dá para jogar normalmente com a página aberta.');
   }
+  const firstHint = () => (isWide()
+    ? 'Escolha um plano ao lado (ou arraste) e solte num espaço verde.'
+    : 'Toque num plano aqui embaixo. Os espaços verdes mostram onde ele cabe.');
   function restart() {
-    closeDialog($('restart-dialog')); state = fresh(); state.mode = 'playing'; resumeMode = null; selected = null; history = []; day = 0; mobileView = 'plans';
-    message('Uma nova semana. Por onde você quer começar?'); save(); render(); focusHeading();
+    closeDialog($('restart-dialog'));
+    state = fresh(); state.mode = 'playing'; resumeMode = null; selected = null; history = [];
+    say(firstHint()); save(); render(); focusHeading();
   }
-  function shareText() {
-    const a = E.stats(0, state.weeks[0]), b = E.stats(1, state.weeks[1]);
-    const squares = n => '🟩'.repeat(n) + '⬜'.repeat(8 - n);
-    let text = `FOLGA ✳ A vida cabe na semana?\n\n6×1 · ${a.count}/8 planos\n${squares(a.count)}\n5×2 · ${b.count}/8 planos\n${squares(b.count)}\n\nNeste jogo: ${a.work}h → ${b.work}h de trabalho por semana.\nO que você faria com mais tempo livre?`;
-    const host = location.hostname;
-    const local = !host || host === 'localhost' || host === '[::1]' || host.endsWith('.local') || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
-    if (['https:', 'http:'].includes(location.protocol) && !local) text += `\n${location.origin + location.pathname}`;
-    return text;
-  }
-  $('start-button').addEventListener('click', start);
-  $('home-button').addEventListener('click', () => {
+  function goHome() {
     if (state.mode === 'intro') return;
-    resumeMode = state.mode; state.mode = 'intro'; selected = null; render(); focusHeading();
-  });
-  for (const button of document.querySelectorAll('[data-about], #about-button')) button.addEventListener('click', () => showDialog('about-dialog'));
-  for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => closeDialog(button.closest('dialog')));
-  for (const dialog of document.querySelectorAll('dialog')) dialog.addEventListener('click', e => {
-    const rect = dialog.getBoundingClientRect();
-    if (e.target === dialog && (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) && dialog.id !== 'event-dialog') closeDialog(dialog);
-  });
-  $('show-plans').addEventListener('click', () => { mobileView = 'plans'; renderGame(); });
-  $('show-calendar').addEventListener('click', () => { mobileView = 'calendar'; renderGame(); });
-  $('day-tabs').addEventListener('click', e => {
-    const button = e.target.closest('[data-day]');
-    if (button) { const value = button.dataset.day; setDay(Number(value)); document.querySelector(`[data-day="${value}"]`)?.focus({ preventScroll: true }); }
-  });
-  $('tasks').addEventListener('click', e => {
-    const button = e.target.closest('[data-task], [data-drag]');
-    if (button && !drag) {
-      selectTask(button.dataset.task || button.dataset.drag);
-      if (e.detail === 0) $('placement-picker').querySelector('.picker-day.active')?.focus();
+    closeAllDialogs(); resumeMode = state.mode; state.mode = 'intro'; selected = null; render(); focusHeading();
+  }
+
+  // ---------- Telas ----------
+  function render() {
+    const screen = state.mode === 'playing' ? 'game' : state.mode;
+    document.body.dataset.screen = screen;
+    document.body.dataset.round = String(state.mode === 'intermission' ? 0 : state.round);
+    for (const id of ['intro', 'game', 'intermission', 'results']) $(id).hidden = id !== screen;
+    if (screen === 'intro') {
+      $('start-button').innerHTML = resumeMode ? 'Continuar minha semana <span aria-hidden="true">→</span>' : 'Montar minha semana <span aria-hidden="true">→</span>';
+      $('fresh-button').hidden = !resumeMode;
+    } else if (screen === 'game') renderGame();
+    else if (screen === 'intermission') renderIntermission();
+    else renderResults();
+  }
+  function renderGame() {
+    const sc = E.SCENARIOS[state.round], n = placements().length;
+    document.body.dataset.round = String(state.round);
+    $('week-scale').textContent = sc.scale;
+    $('week-step').textContent = `Semana ${state.round + 1} de 2`;
+    $('band-icon-use').setAttribute('href', state.round ? '#star' : '#sun');
+    $('week-sub').textContent = `${sc.workHours}h de trabalho · ${state.round ? '2 folgas' : '1 folga'}`;
+    $('score').textContent = String(n);
+    $('undo-button').disabled = history.length === 0;
+    $('tray').innerHTML = E.TASKS.map(t => {
+      const p = placements().find(item => item.id === t.id);
+      const where = p ? `${E.DAYS[p.day]}, ${range(p.start, p.end)}` : 'fora da semana';
+      const windowShort = `${t.days.length === 7 ? 'Qualquer dia' : t.days.map(d => E.SHORT_DAYS[d]).join('/')} · ${range(t.from, t.to)}`;
+      return `<button class="chip${p ? ' placed' : ''}" data-task="${t.id}" style="--c: var(--plan-${t.id})" aria-pressed="${selected === t.id}" aria-label="${t.name}, ${t.hours} horas, ${where}">` +
+        `<span class="emoji" aria-hidden="true">${t.emoji}</span><span class="name short">${t.short}</span><span class="name full">${t.name}</span>` +
+        `<span class="window">${windowShort}</span><span class="meta">${p ? `<span class="tick">✓ </span>${E.SHORT_DAYS[p.day]}<span class="hour"> ${p.start}h</span>` : `${t.hours}h`}</span></button>`;
+    }).join('');
+    renderPicker(); renderAccessible();
+    say(statusText || firstHint(), statusTone, false);
+    drawBoard();
+  }
+  function renderPicker() {
+    const picker = $('picker');
+    $('dock').dataset.mode = selected ? 'pick' : 'tray';
+    picker.hidden = !selected;
+    if (!selected) { picker.innerHTML = ''; return; }
+    const t = E.taskById(selected), current = placements().find(p => p.id === selected);
+    const slots = E.allOptions(state.round, placements(), activeEvent(), selected);
+    const why = E.whyNoRoom(state.round, placements(), activeEvent(), selected);
+    picker.style.setProperty('--c', `var(--plan-${t.id})`);
+    picker.innerHTML = `<div class="picker-head"><span class="emoji" aria-hidden="true">${t.emoji}</span><b>${t.name}</b><span class="plan-hours">${t.hours}h</span><span class="spacer"></span>` +
+      `<button class="picker-close" data-close-picker aria-label="Fechar ${t.name}">×</button></div>` +
+      `<div class="slots" role="group" aria-label="Horários livres para ${t.name}">` +
+      (current ? `<button class="remove-button" data-remove="${t.id}">Tirar da semana</button>` : '') +
+      (slots.length ? slots.map(o => `<button class="slot${current && current.day === o.day && current.start === o.start ? ' current' : ''}" data-day="${o.day}" data-start="${o.start}" aria-label="${E.DAYS[o.day]}, das ${o.start} às ${o.start + t.hours} horas">${E.SHORT_DAYS[o.day]} ${range(o.start, o.start + t.hours)}</button>`).join('')
+        : `<p class="no-room">${why && why.startsWith('Sem espaço') ? 'Libere espaço: toque no plano que ocupa o horário.' : state.round ? 'Sem horário possível nesta semana.' : 'Sem horário possível na 6×1. Na 5×2, ele ganha outra chance.'}</p>`) +
+      '</div>';
+  }
+  function renderAccessible() {
+    const blocks = E.fixedBlocks(state.round, activeEvent()).concat(placements().map(p => ({ ...p, label: `${E.taskById(p.id).name} (plano)` })));
+    $('accessible-board').innerHTML = `<h2>Agenda da semana ${E.SCENARIOS[state.round].scale}</h2>` + E.DAYS.map((name, d) =>
+      `<p>${name}: ${blocks.filter(b => b.day === d).sort((a, b) => a.start - b.start).map(b => `${range(b.start, b.end)} ${b.label.toLowerCase()}`).join('; ')}; 23h–7h sono.</p>`).join('');
+    board.setAttribute('aria-label', `Calendário da semana ${E.SCENARIOS[state.round].scale}: ${placements().length} de 8 planos encaixados. A agenda em texto vem logo depois.`);
+  }
+  function drawThumb(id, round) {
+    const c = $(id); if (!c || !c.getBoundingClientRect().width) return;
+    const { g, W, H } = fitCanvas(c);
+    paintWeek(g, W, H, round, state.weeks[round], state.events[round], { headerH: Math.max(14, W / 16), letters: true, dayFont: Math.max(8, W / 26), emoji: 16, scale: 1 });
+    c.setAttribute('aria-label', `Semana ${E.SCENARIOS[round].scale}: ${state.weeks[round].map(p => `${E.taskById(p.id).name}, ${E.DAYS[p.day].toLowerCase()} ${range(p.start, p.end)}`).join('; ') || 'nenhum plano'}.`);
+  }
+  const leftList = round => E.TASKS.filter(t => !state.weeks[round].some(p => p.id === t.id)).map(t => `${t.emoji} ${t.name}`).join(' · ');
+  function renderIntermission() {
+    const n = state.weeks[0].length;
+    $('mid-title').textContent = `Coube ${n} de 8.`;
+    $('mid-left').innerHTML = n < 8 ? `<b>Ficou de fora:</b> ${leftList(0)}` : 'Coube tudo.';
+    drawThumb('mid-thumb', 0);
+  }
+  function renderResults() {
+    const a = E.stats(0, state.weeks[0]), b = E.stats(1, state.weeks[1]), max0 = E.maxPlans(0).count, max1 = E.maxPlans(1).count;
+    $('results-title').innerHTML = `Na 6×1, coube ${a.count}.<br>Na 5×2, coube ${b.count}.`;
+    $('score-0').innerHTML = `${a.count}/8<small>coube</small>`;
+    $('score-1').innerHTML = `${b.count}/8<small>coube</small>`;
+    const lines = [];
+    if (a.left.length) lines.push(`<b>Na 6×1, ficou de fora:</b> ${leftList(0)}`);
+    if (b.left.length) lines.push(`<b>Na 5×2, ainda ficou de fora:</b> ${leftList(1)}`);
+    $('results-left').innerHTML = lines.join('<br>');
+    const first = a.count >= max0
+      ? `Você jogou certinho: na 6×1, ${max0} de 8 é o máximo que cabe. Não é falta de organização. É falta de tempo.`
+      : `Mesmo jogando perfeito, na 6×1 cabem no máximo ${max0} de 8 planos. Não é falta de organização. É falta de tempo.`;
+    const second = b.count >= max1 ? ' Na 5×2, coube tudo.' : ` Na 5×2, cabem os ${max1}. Quer tentar de novo?`;
+    $('results-insight').textContent = first + second;
+    $('gain-hours').textContent = `+${b.available - a.available}h`;
+    $('gain-text').textContent = `livres por semana na 5×2: ${a.work - b.work}h a menos de trabalho e ${a.commute - b.commute}h a menos de ônibus. E o sábado inteiro.`;
+    drawThumb('thumb-0', 0); drawThumb('thumb-1', 1);
+    prepareShare();
+  }
+  function focusHeading() {
+    const target = { intro: 'intro-title', playing: 'week-title', intermission: 'mid-title', results: 'results-title' }[state.mode];
+    const el = $(target); el.tabIndex = -1; el.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- Compartilhar ----------
+  function shareURL() {
+    const host = location.hostname;
+    const local = !host || host === 'localhost' || /^(127\.|10\.|192\.168\.)/.test(host) || host.endsWith('.local');
+    return /^https?:$/.test(location.protocol) && !local ? location.origin + location.pathname.replace(/index\.html$/, '') : E.SITE_URL;
+  }
+  // Quebra por item (emoji e nome ficam juntos).
+  function wrapItems(g, items, sep, maxWidth) {
+    const lines = [];
+    let line = '';
+    for (const item of items) {
+      const next = line ? line + sep + item : item;
+      if (g.measureText(next).width > maxWidth && line) { lines.push(line); line = item; } else line = next;
     }
-  });
-  $('placement-picker').addEventListener('click', e => {
-    const button = e.target.closest('button'); if (!button) return;
-    if (button.dataset.pickerDay !== undefined) {
-      const value = button.dataset.pickerDay; setDay(Number(value));
-      document.querySelector(`[data-picker-day="${value}"]`)?.focus({ preventScroll: true });
+    if (line) lines.push(line);
+    return lines;
+  }
+  async function buildShareImage() {
+    try { await document.fonts.load(`80px ${DISPLAY}`); } catch { /* Sem Anton, usa a reserva. */ }
+    const C = theme(), W = 1080, H = 1920, c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    g.fillStyle = C.paper; g.fillRect(0, 0, W, H);
+    // Carimbo FOLGA
+    g.save(); g.translate(84, 190); g.rotate(-.05);
+    g.font = `92px ${DISPLAY}`; g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+    const bw = g.measureText('FOLGA').width + 44;
+    g.strokeStyle = C.ink; g.lineWidth = 8; rr(g, 0, 0, bw, 118, 14); g.stroke();
+    g.fillStyle = C.ink; g.fillText('FOLGA', 22, 102);
+    g.restore();
+    g.fillStyle = C.muted; g.font = `700 30px ${SANS}`; g.textAlign = 'right'; g.fillText('UM JOGO SOBRE TEMPO', W - 80, 272);
+    g.fillStyle = C.ink; g.textAlign = 'left'; g.font = `96px ${DISPLAY}`;
+    g.fillText('MINHA SEMANA', 80, 428); g.fillText('NA 6×1 E NA 5×2', 80, 530);
+    // Duas semanas lado a lado, cada uma com sua identidade
+    const panelY = 574, panelW = 452, boardH = 560, headH = 96, panelH = headH + boardH + 124;
+    [[0, 70], [1, W - 70 - panelW]].forEach(([round, x]) => {
+      const wk = C.week[round], n = state.weeks[round].length;
+      g.save(); g.translate(x, panelY);
+      g.fillStyle = C.card; rr(g, 0, 0, panelW, panelH, 20); g.fill();
+      g.save(); rr(g, 0, 0, panelW, panelH, 20); g.clip();
+      g.fillStyle = wk.main; g.fillRect(0, 0, panelW, headH);
+      g.fillStyle = round ? wk.deep : C.yellow; g.fillRect(0, headH, panelW, 10);
+      if (!round) { g.fillStyle = C.navy; g.fillRect(0, headH + 10, panelW, 7); }
+      g.font = `76px ${DISPLAY}`; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+      g.fillStyle = round ? wk.deep : C.navy; g.fillText(E.SCENARIOS[round].scale, 27, 83);
+      g.fillStyle = round ? wk.on : C.yellow; g.fillText(E.SCENARIOS[round].scale, 22, 78);
+      g.font = `800 28px ${SANS}`; g.textAlign = 'right'; g.fillStyle = wk.on;
+      g.fillText(`${E.SCENARIOS[round].workHours}H`, panelW - 24, 62);
+      g.restore();
+      g.save(); g.translate(14, headH + 30);
+      paintWeek(g, panelW - 28, boardH, round, state.weeks[round], state.events[round], { hours: true, gutter: 44, headerH: 40, scale: 2.1, emoji: 15, dayFont: 9.5, letters: true });
+      g.restore();
+      g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = C.ink; g.font = `68px ${DISPLAY}`;
+      g.fillText(`COUBE ${n}/8`, panelW / 2, headH + boardH + 104);
+      g.restore();
+    });
+    // O que ficou de fora
+    let y = panelY + panelH + 72;
+    const left = E.TASKS.filter(t => !state.weeks[0].some(p => p.id === t.id));
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    if (left.length) {
+      g.fillStyle = C.muted; g.font = `800 30px ${SANS}`; g.fillText('NA 6×1, FICOU DE FORA:', 80, y);
+      g.fillStyle = C.ink; g.font = `700 40px ${SANS}, ${EMOJI}`;
+      let lines = wrapItems(g, left.map(t => `${t.emoji} ${t.name}`), '  ·  ', W - 160);
+      if (lines.length > 2) lines = wrapItems(g, left.map(t => t.emoji), '  ', W - 160);
+      for (const line of lines.slice(0, 2)) { y += 54; g.fillText(line, 80, y); }
+    } else {
+      g.fillStyle = C.ink; g.font = `700 40px ${SANS}`; g.fillText('Coube tudo nas duas semanas.', 80, y);
     }
-    else if (button.dataset.start !== undefined) {
-      const id = selected;
-      if (place(selected, day, Number(button.dataset.start)) && !$('event-dialog').open) {
-        const next = E.TASKS.find(task => !placements().some(p => p.id === task.id));
-        const target = document.querySelector(`[data-task="${next ? next.id : id}"]`);
-        if (target) target.focus({ preventScroll: true });
+    // Chamada
+    const ctaY = Math.max(y + 42, 1500);
+    g.fillStyle = C.ink; rr(g, 70, ctaY, W - 140, 150, 22); g.fill();
+    g.fillStyle = C.paper; g.textAlign = 'center'; g.font = `60px ${DISPLAY}`;
+    g.fillText('SUA VIDA CABE NA 6×1?', W / 2, ctaY + 74);
+    g.font = `700 32px ${SANS}`; g.fillText(shareURL().replace(/^https?:\/\//, '').replace(/\/$/, ''), W / 2, ctaY + 124);
+    return c;
+  }
+  function prepareShare() {
+    share.text = E.shareText(state.weeks, shareURL());
+    $('share-text').value = share.text;
+    $('share-whatsapp').href = `https://wa.me/?text=${encodeURIComponent(share.text)}`;
+    share.ready = (async () => {
+      const canvas = await buildShareImage();
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) return false;
+      if (share.url) URL.revokeObjectURL(share.url);
+      share.url = URL.createObjectURL(blob);
+      share.size = blob.size;
+      try { share.file = new File([blob], 'folga-minha-semana.png', { type: 'image/png' }); } catch { share.file = null; }
+      $('share-image').src = share.url;
+      $('download-link').href = share.url;
+      let canFiles = false;
+      try { canFiles = Boolean(share.file && navigator.canShare && navigator.canShare({ files: [share.file] })); } catch { canFiles = false; }
+      $('share-native').hidden = !canFiles;
+      $('share-help').textContent = canFiles
+        ? 'Instagram: toque em “Postar nos Stories ou enviar” e escolha o Instagram. WhatsApp: mande a imagem ou o texto com o link.'
+        : 'Instagram: baixe a imagem e poste nos Stories pelo app. WhatsApp: o botão verde manda o texto com o link.';
+      return true;
+    })();
+    return share.ready;
+  }
+  async function openShare() {
+    $('share-status').textContent = '';
+    openDialog('share-dialog');
+    if (!share.ready) prepareShare();
+    await share.ready;
+  }
+
+  // ---------- Diálogos ----------
+  function openDialog(id) { const d = $(id); if (!d.open) d.showModal(); }
+  function closeDialog(d) { if (d && d.open) d.close(); }
+  function closeAllDialogs() { document.querySelectorAll('dialog[open]').forEach(d => d.close()); }
+
+  // ---------- Eventos ----------
+  $('start-button').addEventListener('click', start);
+  $('home-button').addEventListener('click', goHome);
+  document.querySelectorAll('[data-home]').forEach(b => b.addEventListener('click', goHome));
+  $('about-button').addEventListener('click', () => openDialog('about-dialog'));
+  document.querySelectorAll('[data-about]').forEach(b => b.addEventListener('click', () => openDialog('about-dialog')));
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeDialog(b.closest('dialog'))));
+  document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => {
+    if (e.target !== d || d.id === 'event-dialog') return;
+    const r = d.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closeDialog(d);
+  }));
+
+  $('tray').addEventListener('click', e => {
+    const chip = e.target.closest('[data-task]');
+    if (!chip) return;
+    if (suppressClick) { suppressClick = false; return; }
+    const id = chip.dataset.task;
+    if (selected === id) { deselect(); document.querySelector(`[data-task="${id}"]`)?.focus({ preventScroll: true }); }
+    else select(id, e.detail === 0);
+  });
+  $('picker').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.start !== undefined) {
+      if (place(selected, Number(b.dataset.day), Number(b.dataset.start)) && !$('event-dialog').open) {
+        const next = E.TASKS.find(t => !placements().some(p => p.id === t.id));
+        if (e.detail === 0 && next) document.querySelector(`[data-task="${next.id}"]`)?.focus({ preventScroll: true });
       }
-    }
-    else if (button.dataset.remove) removeTask(button.dataset.remove);
-    else if (button.id === 'cancel-selection') {
-      const id = selected; selected = null; message('Escolha outro plano quando quiser.'); renderGame();
+    } else if (b.dataset.remove) removePlan(b.dataset.remove);
+    else if (b.dataset.closePicker !== undefined) {
+      const id = deselect();
       document.querySelector(`[data-task="${id}"]`)?.focus({ preventScroll: true });
     }
   });
-  canvas.addEventListener('click', e => {
-    if (drag || document.querySelector('dialog[open]')) return;
-    const point = boardPoint(e.clientX, e.clientY); if (!point) return;
-    if (selected) { place(selected, point.day, point.start); return; }
-    const p = placements().find(item => item.day === point.day && point.start >= item.start && point.start < item.end);
-    if (p) selectTask(p.id, false);
-    else { day = point.day; message('Escolha um plano na lista para encontrar um horário.'); renderGame(); }
+
+  // Arrastar (mouse e toque): da bandeja para o calendário, ou um plano já encaixado.
+  function beginPointer(e, source, id) {
+    pointer = { source, id, x0: e.clientX, y0: e.clientY, moved: false, pointerId: e.pointerId, touch: e.pointerType !== 'mouse' };
+  }
+  $('tray').addEventListener('pointerdown', e => {
+    const chip = e.target.closest('[data-task]');
+    if (!chip || e.button > 0) return;
+    beginPointer(e, 'chip', chip.dataset.task);
+    try { chip.setPointerCapture(e.pointerId); } catch { /* Sem captura, segue com eventos do documento. */ }
   });
-  $('tasks').addEventListener('pointerdown', e => {
-    const handle = e.target.closest('[data-drag]');
-    if (!handle || e.button !== 0) return;
-    drag = { id: handle.dataset.drag, startX: e.clientX, startY: e.clientY, moving: false, pointerId: e.pointerId };
-    handle.setPointerCapture(e.pointerId);
+  board.addEventListener('pointerdown', e => {
+    if (e.button > 0 || document.querySelector('dialog[open]')) return;
+    const pt = boardPoint(e.clientX, e.clientY), plan = pt && planAt(pt);
+    beginPointer(e, 'board', plan ? plan.id : null);
+    pointer.pt = pt;
+    try { board.setPointerCapture(e.pointerId); } catch { /* idem */ }
   });
   document.addEventListener('pointermove', e => {
-    if (!drag || e.pointerId !== drag.pointerId) return;
-    if (!drag.moving && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 7) return;
+    if (!pointer) {
+      if (e.target === board && e.pointerType === 'mouse' && selected) { hover = boardPoint(e.clientX, e.clientY); drawBoard(); }
+      return;
+    }
+    if (e.pointerId !== pointer.pointerId) return;
+    if (!pointer.moved) {
+      if (!pointer.id || Math.hypot(e.clientX - pointer.x0, e.clientY - pointer.y0) < 8) return;
+      pointer.moved = true;
+      const t = E.taskById(pointer.id), ghost = $('drag-ghost');
+      ghost.textContent = `${t.emoji} ${t.short} · ${t.hours}h`;
+      ghost.style.setProperty('--c', `var(--plan-${t.id})`);
+      ghost.hidden = false;
+      document.querySelector(`[data-task="${t.id}"]`)?.classList.add('dragging');
+    }
     e.preventDefault();
-    drag.moving = true; selected = drag.id;
-    $('drag-ghost').hidden = false; $('drag-ghost').textContent = `${E.taskById(drag.id).name} · ${E.taskById(drag.id).hours}h`;
-    $('drag-ghost').style.left = `${e.clientX}px`; $('drag-ghost').style.top = `${e.clientY}px`;
-    hover = boardPoint(e.clientX, e.clientY); draw();
-    if (e.clientY < 70) window.scrollBy(0, -12);
-    else if (e.clientY > window.innerHeight - 70) window.scrollBy(0, 12);
+    const lift = pointer.touch ? 54 : 0;
+    $('drag-ghost').style.transform = `translate(${e.clientX}px, ${e.clientY - lift}px) translate(-50%, -50%)`;
+    hover = boardPoint(e.clientX, e.clientY - lift / 2);
+    drawBoard();
   }, { passive: false });
   document.addEventListener('pointerup', e => {
-    if (!drag || e.pointerId !== drag.pointerId) return;
-    const current = drag, point = boardPoint(e.clientX, e.clientY);
-    $('drag-ghost').hidden = true; hover = null;
-    // Defer reset so the synthetic click following pointerup cannot select the task again.
-    if (current.moving) {
-      if (point) place(current.id, point.day, point.start);
-      else { message('Solte sobre um horário do calendário, ou escolha um horário pelos botões.'); renderGame(); }
-    } else selectTask(current.id);
-    setTimeout(() => { drag = null; draw(); }, 0);
+    if (!pointer || e.pointerId !== pointer.pointerId) return;
+    const p = pointer;
+    pointer = null;
+    $('drag-ghost').hidden = true;
+    if (p.moved) {
+      if (p.source === 'chip') suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 0);
+      drop(p.id, boardPoint(e.clientX, e.clientY - (p.touch ? 27 : 0)));
+    } else if (p.source === 'board') tapBoard(p.pt);
   });
-  document.addEventListener('pointercancel', () => { drag = null; hover = null; $('drag-ghost').hidden = true; draw(); });
+  document.addEventListener('pointercancel', () => { pointer = null; hover = null; $('drag-ghost').hidden = true; renderGame(); });
+  board.addEventListener('pointerleave', () => { if (!pointer && hover) { hover = null; drawBoard(); } });
+
   $('undo-button').addEventListener('click', undo);
   $('finish-button').addEventListener('click', askFinish);
   $('confirm-finish').addEventListener('click', finish);
-  function eventClosed() {
-    const after = eventAfter; eventAfter = null;
-    if (after === 'finish') askFinish();
-    else { message('Imprevisto anotado. Você pode reorganizar seus planos.'); renderGame(); }
-  }
   $('event-ok').addEventListener('click', () => closeDialog($('event-dialog')));
-  $('event-dialog').addEventListener('close', eventClosed);
-  $('next-button').addEventListener('click', () => {
-    state.round = 1; state.mode = 'playing'; day = 5; selected = null; history = []; mobileView = 'plans';
-    message('Os mesmos planos. Agora o sábado também está livre do trabalho.'); save(); render(); focusHeading();
+  $('event-dialog').addEventListener('close', () => {
+    const after = eventAfter; eventAfter = null;
+    if (state.mode !== 'playing') return;
+    if (after === 'finish') askFinish();
+    else { say('Imprevisto anotado. Reorganize como quiser.'); renderGame(); }
   });
-  for (const id of ['fresh-button', 'replay-button']) $(id).addEventListener('click', () => showDialog('restart-dialog'));
+  $('next-button').addEventListener('click', nextWeek);
+  for (const id of ['fresh-button', 'replay-button']) $(id).addEventListener('click', () => openDialog('restart-dialog'));
   $('confirm-restart').addEventListener('click', restart);
-  $('share-button').addEventListener('click', () => { $('share-text').value = shareText(); $('copy-status').textContent = 'O compartilhamento só acontece quando você copiar e enviar o texto.'; showDialog('share-dialog'); });
+  $('share-button').addEventListener('click', openShare);
+  $('share-native').addEventListener('click', async () => {
+    if (!share.file) return;
+    try {
+      await navigator.share({ files: [share.file], text: share.text });
+      $('share-status').textContent = 'Pronto!';
+    } catch (err) {
+      if (err && err.name !== 'AbortError') $('share-status').textContent = 'Não deu para abrir o compartilhamento. Use “Baixar imagem”.';
+    }
+  });
   $('copy-button').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText($('share-text').value); $('copy-status').textContent = 'Copiado. Pronto para colar onde você quiser.'; }
-    catch { $('share-text').focus(); $('share-text').select(); $('copy-status').textContent = 'Selecionei o texto. Use Copiar no seu dispositivo (⌘C no Mac).'; }
+    let copied = false;
+    try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(share.text); copied = true; } } catch { copied = false; }
+    if (!copied) { const t = $('share-text'); t.focus(); t.select(); }
+    $('share-status').textContent = copied ? 'Texto copiado. Cole no WhatsApp, no Instagram ou onde quiser.' : 'Texto selecionado: use Copiar no seu aparelho.';
   });
   document.addEventListener('keydown', e => {
-    if (e.key.toLowerCase() !== 'f' || e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open]') || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
-    else document.documentElement.requestFullscreen?.().catch(() => {});
+    if (state.mode !== 'playing' || document.querySelector('dialog[open]')) return;
+    if (e.key === 'Escape' && selected) {
+      const id = deselect();
+      document.querySelector(`[data-task="${id}"]`)?.focus({ preventScroll: true });
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !/INPUT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); undo(); }
   });
-  new ResizeObserver(() => draw()).observe($('canvas-wrap'));
-  window.addEventListener('resize', draw);
-  window.render_game_to_text = () => JSON.stringify({
-    mode: state.mode, round: state.round + 1, scenario: E.SCENARIOS[state.round], day: E.DAYS[day], mobileView,
-    selected, eventActive: activeEvent(), dialog: document.querySelector('dialog[open]')?.id || null,
-    plans: E.TASKS.map(t => ({ id: t.id, name: t.name, hours: t.hours, days: t.days.map(d => E.DAYS[d]), window: timeRange(t.from, t.to), scheduled: placements().find(p => p.id === t.id) || null })),
-    choices: selected ? E.DAYS.map((name, d) => ({ day: name, dayIndex: d, starts: possible(selected, d) })) : [],
-    weeks: state.weeks, stats: state.weeks.map((w, r) => E.stats(r, w, state.events[r])),
-    message: statusText, storageAvailable: storageOK,
-    board: board ? { origin: 'canvas top left; x right, y down; CSS pixels; hours 7–23', ...board } : null
+  if (typeof ResizeObserver === 'function') new ResizeObserver(() => drawBoard()).observe($('board-wrap'));
+  let resizeTimer = 0;
+  window.addEventListener('resize', () => {
+    drawBoard();
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (state.mode === 'results') { drawThumb('thumb-0', 0); drawThumb('thumb-1', 1); } else if (state.mode === 'intermission') drawThumb('mid-thumb', 0); }, 120);
   });
-  window.advanceTime = () => { draw(); return Promise.resolve(); };
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { drawBoard(); });
+
+  // Ganchos de teste: estado em texto e geometria do calendário (px CSS, origem no canto superior esquerdo do canvas).
+  window.render_game_to_text = () => {
+    const rect = board.getBoundingClientRect();
+    return JSON.stringify({
+      mode: state.mode, round: state.round + 1, scale: E.SCENARIOS[state.round].scale, selected, eventActive: activeEvent(),
+      events: state.events, dialog: document.querySelector('dialog[open]')?.id || null, status: statusText, statusTone,
+      resumeMode, storageAvailable: storageOK, historyLength: history.length,
+      plans: E.TASKS.map(t => ({ id: t.id, name: t.name, hours: t.hours, scheduled: placements().find(p => p.id === t.id) || null })),
+      options: selected ? E.allOptions(state.round, placements(), activeEvent(), selected) : [],
+      weeks: state.weeks, stats: [0, 1].map(r => E.stats(r, state.weeks[r], state.events[r])),
+      board: geo && state.mode === 'playing' ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, firstHour: FIRST, ...geo } : null,
+      share: { text: share.text, whatsapp: $('share-whatsapp').getAttribute('href'), imageBytes: share.size || 0, nativeShare: !$('share-native').hidden }
+    });
+  };
+  window.advanceTime = () => { drawBoard(); return Promise.resolve(); };
+
   render();
 })();

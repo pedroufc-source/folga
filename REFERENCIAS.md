@@ -1,54 +1,45 @@
 # Referências e premissas do FOLGA
 
-Registro organizado em 08/10/2026. As duas fontes abaixo foram consultadas na correção da versão para 44h/40h. Este documento organiza a referência já usada; não constitui uma nova revisão da tramitação legislativa.
+Atualizado em 8/10/2026. O jogo é um modelo: só as cargas semanais vêm de fontes. Todo o resto é escolha de desenho, e o jogo diz isso no diálogo "Como funciona".
 
-## Fontes externas usadas
+## Fontes
 
-### 1. Constituição Federal — art. 7º, XIII
+### 1. Constituição Federal, art. 7º, XIII
+- [Planalto: Constituição](https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm).
+- Uso: limite de 8h diárias e 44h semanais para o trabalho normal (com compensação e redução por acordo ou convenção coletiva).
+- Limite: a Constituição não obriga a escala 6×1 nem diz que todo mundo trabalha 44h. A distribuição do jogo (cinco dias de 8h e sábado de 4h) é do modelo.
 
-- Instituição: Presidência da República / Portal da Legislação.
-- [Abrir Constituição](https://www4.planalto.gov.br/legislacao/legis-federal/constituicao).
-- Uso no jogo: referência ao limite geral de 8h diárias e 44h semanais de trabalho normal, com possibilidade de compensação e redução.
-- Limite da afirmação: isso não significa que todo brasileiro trabalhe 44h, nem que a Constituição obrigue a escala 6×1. A escolha de cinco dias de 8h e sábado de 4h é uma distribuição adotada pelo calendário do jogo.
+### 2. Agência Senado, 7/10/2026
+- ["PEC do fim da escala 6x1 passa por 2ª sessão de discussão no Plenário"](https://www12.senado.leg.br/noticias/materias/2026/10/07/pec-do-fim-da-escala-6x1-passa-por-2a-sessao-de-discussao-no-plenario).
+- Uso: a PEC 221/2019 "reduz de 44 para 40 horas a duração máxima da jornada semanal de trabalho" e "prevê dois dias de repouso por semana, sem redução salarial". O jogo diz que a PEC **propõe** isso.
+- Situação na data: em discussão em primeiro turno no Plenário do Senado. Precisa de 49 votos em dois turnos. **Reconfira antes de escrever qualquer coisa sobre aprovação ou vigência.**
+- Limite: a transição prevista (a notícia fala em 40h após 1 ano e 2 meses) e as exceções não entram no jogo.
 
-### 2. Proposta de 40h em cinco dias e dois dias de descanso
+### 3. Agência Câmara, 27/5/2026
+- ["Plenário analisa neste momento PEC que acaba com escala 6x1; acompanhe"](https://www.camara.leg.br/noticias/1277073-plenario-analisa-neste-momento-pec-que-acaba-com-escala-6x1-acompanhe).
+- Uso: o texto em discussão na Câmara fixava 40h "em cinco dias, com dois de descanso", sem redução de salário.
 
-- Instituição: Agência Câmara de Notícias.
-- Publicação: 27/05/2026, “Plenário analisa neste momento PEC que acaba com escala 6x1; acompanhe”.
-- [Abrir notícia da Câmara](https://www.camara.leg.br/noticias/1277073-plenario-analisa-neste-momento-pec-que-acaba-com-escala-6x1-acompanhe).
-- Uso no jogo: referência para o cenário comparado de 40h em cinco dias e duas folgas. A notícia descreve o substitutivo em discussão naquela data.
-- Limite da afirmação: o jogo não reproduz toda a proposta, suas transições ou exceções. A notícia não é prova de promulgação ou vigência posterior. O segundo cenário é uma simulação dessa distribuição de horas.
+## O que é modelo
 
-As referências estão disponíveis também na janela “Como funciona” do próprio jogo. **Não foram arquivados PDFs, HTML integral ou capturas dessas páginas externas nesta pasta.** Estão preservados os links e a indicação do uso de cada fonte.
-
-## O que é escolha do modelo
-
-| Elemento | Valor adotado | Natureza |
+| Elemento | Valor no jogo | Natureza |
 | --- | --- | --- |
-| Semana inicial | 44h em seis dias | Limite de referência documentado; distribuição diária escolhida para o jogo |
-| Semana comparada | 40h em cinco dias | Cenário proposto documentado; horários diários escolhidos para o jogo |
-| Sono | 8h por noite | Premissa, não medida de uma amostra nem recomendação clínica |
-| Rotina | 3h por dia | Premissa simplificada para cuidados, refeições e casa |
-| Trajeto | 2h por dia trabalhado | Premissa, não média brasileira |
-| Imprevisto | Um atraso de 1h na quarta | Evento de game design, igual nas duas rodadas |
-| Atividades | Oito planos, 25h no total | Conteúdo criado para o quebra-cabeça |
-| Janelas das atividades | Dias e horas fixos | Restrições autorais, não resultado de pesquisa de hábitos |
-| Disponibilidade após o imprevisto | 34h e 40h | Resultado aritmético das premissas, não estimativa populacional |
-| Diferença | 6h: 4h de trabalho + 2h de trajeto | Resultado do modelo |
+| 6×1 | Seg a sex 9h–12h e 13h–18h; sábado 9h–13h | Distribuição escolhida para chegar a 44h |
+| 5×2 | Seg a sex 9h–12h e 13h–18h; sábado e domingo livres | Distribuição escolhida para 40h; a PEC fala em dois dias de descanso, não necessariamente sábado e domingo |
+| Almoço | 12h–13h, fora das horas de trabalho | Premissa |
+| Ônibus | 1h na ida e 1h na volta por dia trabalhado | Premissa, não média brasileira |
+| Sono | 23h–7h | Premissa |
+| Casa | 3h por dia (café, almoço ou janta, casa) | Premissa |
+| Imprevisto | Ônibus atrasa 1h na quarta, nas duas semanas | Desenho de jogo |
+| Planos | Oito, 25h no total, com dias e janelas fixos | Conteúdo criado para o quebra-cabeça |
+| Livre para os planos | 34h na 6×1 e 40h na 5×2 | Conta das premissas acima |
+| Máximo possível | 6 de 8 na 6×1; 8 de 8 na 5×2 | Calculado por busca exaustiva (`maxPlans` em `engine.js`), testado |
 
-O jogo modifica dias trabalhados e carga semanal ao mesmo tempo. Logo, não isola o efeito de mudar a escala mantendo a mesma carga horária. Também não estima salário, renda, produtividade, saúde, emprego ou efeitos econômicos.
+Mudam ao mesmo tempo os dias trabalhados e a carga semanal; o jogo não separa os dois efeitos. Também não simula salário, renda, emprego ou produtividade.
 
-## Evidência sobre o próprio jogo
+## Por que na 6×1 não cabe tudo
 
-A validação existente é funcional: regras de horário, colisões, totais, controles, salvamento, telas e comparação. Os registros estão em [output/VERIFICACAO.json](output/VERIFICACAO.json) e [output/qa/report.json](output/qa/report.json).
+- A feira é sábado de manhã, e na 6×1 sábado de manhã é trabalho.
+- Praia (6h) e almoço de domingo (3h) disputam o único dia livre.
+- As noites de semana têm no máximo 3h livres (20h–23h), então o hobby de 4h só cabe no fim de semana.
 
-Não há estudo com jogadores nem levantamento científico específico sobre alcance, retenção, aprendizado ou mudança de opinião causados pelo FOLGA. A duração de 2–3 minutos apareceu como intenção inicial de design, não como duração medida. As seis atividades possíveis na primeira semana e oito na segunda derivam das regras deste quebra-cabeça.
-
-## Referências internas e histórico
-
-- [README.md](README.md): documentação operacional e cálculo das horas.
-- [CLAUDE.md](CLAUDE.md): guia de continuidade, arquivos e decisões.
-- [engine.js](engine.js): regras efetivamente implementadas.
-- [tests/engine.test.cjs](tests/engine.test.cjs): exemplos verificáveis de encaixe e consistência.
-- [progress.md](progress.md): registro da evolução. As seções iniciais de 42h/35h são históricas e foram substituídas por 44h/40h.
-- [output/VERIFICACAO-42-35.json](output/VERIFICACAO-42-35.json): validação histórica da versão anterior; não usar como descrição da versão atual.
+Isso é produto das janelas escolhidas, não uma estimativa sobre a população. O ponto do jogo é mostrar como um dia livre só concentra tudo o que não cabe nos outros seis.

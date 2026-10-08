@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>FOLGA: imagem de compartilhamento do link</title>
+<!-- Gera og.png (1200×630) com `npm run images`. Usa os tokens e a fonte do jogo. -->
+<link rel="stylesheet" href="../styles.css">
+<style>
+  html, body { width: 1200px; height: 630px; margin: 0; overflow: hidden; }
+  body { display: grid; grid-template-columns: 1fr 470px; gap: 56px; align-items: center; padding: 0 72px; background: var(--paper); }
+  .brand { font-size: 46px; border-width: 5px; padding: 2px 16px 0; display: inline-block; }
+  h1 { margin: 34px 0 18px; font-family: var(--display); font-weight: 400; font-size: 104px; line-height: .95; text-transform: uppercase; }
+  p { margin: 0; font-size: 28px; font-weight: 600; color: var(--muted); }
+  .scales { gap: 22px; margin: 0; }
+  .scale { grid-template-columns: 96px 1fr 70px; padding: 18px 20px; border-radius: 14px; gap: 16px; }
+  .scale-name { font-size: 52px; }
+  .strip { gap: 6px; }
+  .strip i { height: 52px; border-radius: 6px; }
+  .strip svg { max-width: 34px; }
+  .scale small { font-size: 18px; }
+</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="star" viewBox="0 0 24 24"><path d="M12 1.8l3 7.1 7.7.6-5.9 5 1.8 7.5L12 18l-6.6 4 1.8-7.5-5.9-5 7.7-.6z"/></symbol>
+    <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.6"/><path d="M12 1.5v3.2M12 19.3v3.2M1.5 12h3.2M19.3 12h3.2M4.6 4.6l2.3 2.3M17.1 17.1l2.3 2.3M4.6 19.4l2.3-2.3M17.1 6.9l2.3-2.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  </svg>
+  <div>
+    <span class="brand">FOLGA</span>
+    <h1>Sua vida cabe na 6×1?</h1>
+    <p>Encaixe oito planos na semana. Depois, tente na 5×2.</p>
+  </div>
+  <div class="scales">
+    <div class="scale scale-0"><b class="scale-name">6×1</b><span class="strip"><i></i><i></i><i></i><i></i><i></i><i></i><i class="off"><svg><use href="#sun"/></svg></i></span><small>44h<br>1 folga</small></div>
+    <div class="scale scale-1"><b class="scale-name">5×2</b><span class="strip"><i></i><i></i><i></i><i></i><i></i><i class="off"><svg><use href="#star"/></svg></i><i class="off"><svg><use href="#star"/></svg></i></span><small>40h<br>2 folgas</small></div>
+  </div>
+</body>
+</html>
