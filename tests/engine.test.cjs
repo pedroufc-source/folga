@@ -15,8 +15,8 @@ test('Cada semana soma 168h; com Lula sobram 6h a mais e um dia inteiro', () => 
   assert.deepEqual(E.offDays(E.newWeek(1)), [5, 6]);
 });
 
-test('Dia de trabalho leva junto ônibus e almoço; o de 4h não tem almoço', () => {
-  const eight = E.workSegments(8, 0, 8), four = E.workSegments(4, 5, 8);
+test('Dia de trabalho leva junto transporte e almoço; o de 4h não tem almoço', () => {
+  const eight = E.workSegments(8, { day: 0, start: 8, ...E.defaultSettings(8) }), four = E.workSegments(4, { day: 5, start: 8, ...E.defaultSettings(4) });
   assert.deepEqual(eight.map(s => [s.start, s.end, s.kind]), [[8, 9, 'commute'], [9, 13, 'work'], [13, 14, 'lunch'], [14, 18, 'work'], [18, 19, 'commute']]);
   assert.deepEqual(four.map(s => [s.start, s.end, s.kind]), [[8, 9, 'commute'], [9, 13, 'work'], [13, 14, 'commute']]);
   for (const r of [0, 1]) {
@@ -43,7 +43,7 @@ test('Qualquer plano vai em qualquer dia e hora livres; a recusa explica o motiv
   assert.equal(E.check(0, w, items, 'familia', 6, 7).ok, true);
   assert.equal(E.check(1, E.newWeek(1), items, 'mercado', 5, 9).ok, true);
   assert.equal(E.check(0, w, items, 'mercado', 5, 9).reason, 'Nesse horário você está no trabalho.');
-  assert.equal(E.check(0, w, items, 'mercado', 0, 8).reason, 'Nesse horário você está no ônibus.');
+  assert.equal(E.check(0, w, items, 'mercado', 0, 8).reason, 'Nesse horário você está no transporte, indo ou voltando do trabalho.');
   assert.equal(E.check(0, w, items, 'mercado', 0, 13).reason, 'É o seu horário de almoço.');
   assert.match(E.check(0, w, items, 'faxina', 0, 20).reason, /23h/);
   assert.equal(E.whyNotHere(0, w, items, 'praia', 1, 20), 'Aqui só tem 4h livres seguidas. Praia precisa de 6h.');
@@ -60,6 +60,28 @@ test('O trabalho também se move: outro horário, outro dia, e a folga vai junto
   w = E.move(0, w, items, 'w5', 6, 12).week;
   assert.deepEqual(E.offDays(w), [5], 'o sábado vira a folga');
   assert.equal(E.check(0, w, items, 'w0', 0, 13).reason, 'Não cabe: são 11h e às 23h é hora de dormir.');
+});
+
+test('Hora extra até 2h e almoço móvel; a CLT barra mais de 6h seguidas', () => {
+  let w = E.newWeek(0);
+  const noLunch = E.editWork(0, w, items, 'w0', { lunch: false });
+  assert.equal(noLunch.ok, false); assert.equal(noLunch.code, 'clt71'); assert.equal(noLunch.reason, E.CLT71);
+  let r = E.editWork(0, w, items, 'w0', { extra: 1 });
+  assert.equal(r.ok, true);
+  assert.deepEqual(E.workSegments(8, r.work).map(s => [s.start, s.end, s.kind]), [[8, 9, 'commute'], [9, 13, 'work'], [13, 14, 'lunch'], [14, 19, 'work'], [19, 20, 'commute']]);
+  assert.equal(E.stats(0, r.week, items).work, 45);
+  assert.equal(E.stats(0, r.week, items).free, 50);
+  r = E.editWork(0, E.editWork(0, r.week, items, 'w0', { extra: 1 }).week, items, 'w0', { extra: 1 });
+  assert.equal(r.ok, false); assert.equal(r.code, 'clt59');
+  assert.equal(E.editWork(0, w, items, 'w0', { extra: -1 }).code, 'contract');
+  assert.equal(E.editWork(0, w, items, 'w0', { lunchAt: 2 }).ok, true, 'almoço depois de 6h de trabalho ainda vale');
+  assert.equal(E.editWork(0, E.editWork(0, w, items, 'w0', { lunchAt: 2 }).week, items, 'w0', { lunchAt: 1 }).code, 'clt71');
+  const four = E.editWork(0, E.editWork(0, w, items, 'w5', { extra: 1 }).week, items, 'w5', { extra: 1 });
+  assert.equal(four.ok, true, 'dia de 4h com 2h extras: 6h seguidas sem intervalo ainda é permitido');
+  w = E.move(0, w, items, 'faxina', 0, 19).week;
+  const blocked = E.editWork(0, w, items, 'w0', { extra: 1 });
+  assert.equal(blocked.ok, true, 'se não cabe para baixo, o dia de trabalho começa mais cedo');
+  assert.equal(blocked.work.start, 7);
 });
 
 test('Toque no calendário escolhe o início que cobre a hora, centrado no toque', () => {
@@ -89,7 +111,7 @@ test('Mudar o voto leva a semana junto; na 6×1 volta o dia de 4h e tira o que e
   lula = E.move(1, lula, items, 'estudo', 1, 19).week;
   const to61 = E.carryOver(lula, 0, items);
   assert.deepEqual(to61.removed.map(p => p.uid), ['mercado', 'faxina']);
-  assert.deepEqual(to61.week.work.find(x => x.uid === 'w5'), { uid: 'w5', day: 5, start: 8 });
+  assert.deepEqual(to61.week.work.find(x => x.uid === 'w5'), { uid: 'w5', day: 5, start: 8, extra: 0, lunch: false, lunchAt: 4 });
   const moved = E.move(1, E.newWeek(1), items, 'w4', 5, 8).week;
   assert.deepEqual(E.carryOver(moved, 0, items).week.work.find(x => x.uid === 'w5').day, 6, 'se o sábado já tem trabalho, o dia de 4h vai para o domingo');
 });
@@ -101,10 +123,14 @@ test('Itens próprios: nome e horas validados', () => {
 });
 
 test('Saves inválidos ou incoerentes são recusados', () => {
-  const ok = { version: 4, mode: 'playing', first: 0, step: 0, round: 0, items, weeks: [{ work: E.defaultWork(0), plans: [{ uid: 'praia', day: 6, start: 7 }] }, null], nextId: 1 };
+  const ok = { version: 5, mode: 'playing', vote: 1, round: 0, clock: 80, items, weeks: [{ work: E.defaultWork(0), plans: [{ uid: 'praia', day: 6, start: 7 }] }, null], nextId: 1 };
   assert.ok(E.validateSave(ok));
-  assert.equal(E.validateSave({ ...ok, version: 3 }), null);
-  assert.equal(E.validateSave({ ...ok, round: 1 }), null);
+  assert.ok(E.validateSave({ ...ok, mode: 'gameover', clock: 0 }));
+  assert.equal(E.validateSave({ ...ok, version: 4 }), null);
+  assert.equal(E.validateSave({ ...ok, round: 1 }), null, 'a 5×2 só depois da 6×1');
+  assert.equal(E.validateSave({ ...ok, clock: 999 }), null);
+  const noLunch = E.defaultWork(0).map(w => (w.uid === 'w0' ? { ...w, lunch: false, lunchAt: 8 } : w));
+  assert.equal(E.validateSave({ ...ok, weeks: [{ work: noLunch, plans: [] }, null] }), null, '8h seguidas não passam');
   assert.equal(E.validateSave({ ...ok, weeks: [{ work: E.defaultWork(0), plans: [{ uid: 'mercado', day: 5, start: 9 }] }, null] }), null);
   assert.equal(E.validateSave({ ...ok, weeks: [{ work: E.defaultWork(1), plans: [] }, null] }), null, 'faltou um dia de trabalho');
   assert.equal(E.validateSave({ ...ok, items: [...items, { uid: 'x', name: 'X', short: 'X', emoji: '✨', hours: 20, color: 0 }] }), null);

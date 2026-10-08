@@ -1,20 +1,20 @@
-// FOLGA — interface: escolha do candidato, calendário em canvas, lista de planos, salvamento,
-// resultado e compartilhamento (imagem para Stories/WhatsApp, link do WhatsApp e texto).
+// FOLGA — interface: primeira página, semana 6×1 com relógio e game over, semana 5×2, calendário em
+// canvas, lista de planos, salvamento, resultado e compartilhamento (Stories/WhatsApp, link e texto).
 (() => {
   'use strict';
   const E = window.FolgaEngine;
   const $ = id => document.getElementById(id);
-  const KEY = 'folga-v4';
+  const KEY = 'folga-v5';
   const FIRST = E.FIRST_HOUR, LAST = E.LAST_HOUR, ROWS = LAST - FIRST;
   const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
   const EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
   const DISPLAY = "Anton, Impact, 'Arial Narrow', sans-serif";
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const fresh = () => ({ version: 4, mode: 'intro', first: 0, step: 0, round: 0, items: E.starterItems(), weeks: [null, null], nextId: 1 });
+  const fresh = () => ({ version: 5, mode: 'intro', vote: 0, round: 0, clock: E.CLOCK_SECONDS, items: E.starterItems(), weeks: [null, null], nextId: 1 });
 
   let state = fresh(), storageOK = true, resumeMode = null;
   let selected = null, history = [], statusText = '', statusTone = '';
-  let pointer = null, hover = null, pop = null, geo = null, suppressClick = false, workTap = null;
+  let pointer = null, hover = null, pop = null, geo = null, suppressClick = false, workTap = null, lastTick = 0;
   const share = { ready: null, file: null, url: '', text: '', size: 0 };
 
   try {
@@ -31,14 +31,14 @@
   const who = round => E.SCENARIOS[round].candidate;
   const range = (a, b) => `${a}h–${b}h`;
   const isWide = () => window.matchMedia('(min-width: 820px)').matches;
-  const playedRounds = () => (state.mode === 'results' || (state.mode === 'playing' && state.step === 1) ? [0, 1] : [state.first]);
+  const timed = () => state.mode === 'playing' && state.round === 0;
   const itemLabel = it => `${it.emoji} ${it.name}`;
-  const onDay = d => `${d >= 5 ? 'no' : 'na'} ${E.DAYS[d].toLowerCase()}`;
   const placedOf = uid => (E.isWork(uid) ? week().work : week().plans).find(p => p.uid === uid);
+  const spanOf = uid => E.spanOf(state.round, week(), items(), uid);
 
   function save() {
     const mode = resumeMode || state.mode;
-    try { if (mode === 'intro') localStorage.removeItem(KEY); else localStorage.setItem(KEY, JSON.stringify({ ...state, mode })); }
+    try { if (mode === 'intro') localStorage.removeItem(KEY); else localStorage.setItem(KEY, JSON.stringify({ ...state, mode, clock: Math.max(0, Math.round(state.clock)) })); }
     catch { storageOK = false; }
   }
 
@@ -51,7 +51,7 @@
     const id = r => ({ main: v(`r${r}-main`), deep: v(`r${r}-deep`), on: v(`r${r}-on`), soft: v(`r${r}-soft`), head: v(`r${r}-head`), headInk: v(`r${r}-head-ink`) });
     T = { paper: v('paper'), card: v('card'), ink: v('ink'), muted: v('muted'), board: v('board'), grid: v('grid'),
       hourInk: v('hour-ink'), dayInk: v('day-ink'), work: v('work'), workInk: v('work-ink'), workHatch: v('work-hatch'),
-      commute: v('commute'), lunch: v('routine'), lunchInk: v('routine-ink'), slot: v('slot'), slotFill: v('slot-fill'),
+      extra: v('extra'), commute: v('commute'), lunch: v('routine'), lunchInk: v('routine-ink'), slot: v('slot'), slotFill: v('slot-fill'),
       bad: v('bad'), badFill: v('bad-fill'), planInk: v('plan-ink'), yellow: v('r0-yellow'), navy: v('r0-navy'),
       week: [id(0), id(1)], plan: Array.from({ length: E.COLORS }, (_, i) => v(`plan-${i}`)) };
     return T;
@@ -104,9 +104,9 @@
       g.translate(r.x + r.w / 2, r.y + r.h / 2); g.scale(k, k); g.translate(-(r.x + r.w / 2), -(r.y + r.h / 2));
     };
     for (const w of wk.work) {
-      const hours = E.workHoursOf(round, w.uid), whole = box(w.day, w.start, w.start + E.workSpan(hours));
+      const hours = E.workHoursOf(round, w.uid), whole = box(w.day, w.start, w.start + E.workSpan(hours, w));
       g.save(); lift(w.uid, whole);
-      for (const seg of E.workSegments(hours, w.day, w.start)) {
+      for (const seg of E.workSegments(hours, w)) {
         const r = box(seg.day, seg.start, seg.end);
         g.fillStyle = { work: C.work, commute: C.commute, lunch: C.lunch }[seg.kind];
         rr(g, r.x, r.y, r.w, r.h, rad); g.fill();
@@ -120,6 +120,13 @@
         } else if (o.labels && r.h > 12 * s) {
           textAt(g, 'Almoço', r.x + r.w / 2, r.y + r.h / 2, 9.5 * s, 600, C.lunchInk, r.w - 4);
         }
+      }
+      // Hora extra: as últimas horas de trabalho ganham uma faixa de alerta.
+      if (w.extra) {
+        const segs = E.workSegments(hours, w).filter(x => x.kind === 'work'), last = segs[segs.length - 1];
+        const r = box(w.day, last.end - w.extra, last.end);
+        g.fillStyle = C.extra; rr(g, r.x, r.y, r.w, Math.max(3 * s, r.h * .18), rad); g.fill();
+        if (o.labels && r.h > 14 * s) textAt(g, `+${w.extra}h extra`, r.x + r.w / 2, r.y + r.h / 2 + 3 * s, 9 * s, 800, C.extra, r.w - 4);
       }
       if (o.selected === w.uid) { g.lineWidth = 3 * s; g.strokeStyle = C.yellow; rr(g, whole.x - 1, whole.y - 1, whole.w + 2, whole.h + 2, rad); g.stroke(); g.lineWidth = 1.5 * s; g.strokeStyle = C.ink; g.stroke(); }
       g.restore();
@@ -170,7 +177,7 @@
 
   // ---------- Tabuleiro ----------
   function regionFor(uid) {
-    const span = E.spanOf(state.round, items(), uid), segs = [];
+    const span = spanOf(uid), segs = [];
     for (let d = 0; d < 7; d++) {
       let cur = null;
       for (const s of E.options(state.round, week(), items(), uid, d)) {
@@ -181,14 +188,14 @@
     return segs;
   }
   function previewFor(uid, pt) {
-    const span = E.spanOf(state.round, items(), uid);
+    const span = spanOf(uid);
     const s = E.resolveStart(state.round, week(), items(), uid, pt.day, pt.hour);
     if (s !== null) return { uid, day: pt.day, start: s, end: s + span, ok: true };
     const start = Math.min(Math.max(Math.round(pt.hour + .5 - span / 2), FIRST), LAST - span);
     return { uid, day: pt.day, start, end: start + span, ok: false };
   }
   function drawBoard() {
-    if (state.mode !== 'playing') return;
+    if (state.mode !== 'playing' && state.mode !== 'gameover') return;
     const { g, W, H } = fitCanvas(board);
     if (W < 20 || H < 20) return;
     const big = W >= 520;
@@ -217,6 +224,33 @@
   }
   const blockAt = pt => E.blocks(state.round, week(), items()).find(b => b.day === pt.day && pt.hour >= b.start && pt.hour < b.end);
 
+  // ---------- Relógio da semana 6×1 ----------
+  const fmtClock = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  function renderClock() {
+    const on = state.round === 0 && state.mode !== 'results';
+    $('clock').hidden = !on;
+    document.querySelector('.clock-bar').hidden = !on;
+    if (!on) return;
+    const left = Math.max(0, Math.ceil(state.clock));
+    $('clock-text').textContent = fmtClock(left);
+    $('clock').classList.toggle('low', left <= 20);
+    $('clock-bar').style.transform = `scaleX(${Math.max(0, state.clock / E.CLOCK_SECONDS)})`;
+  }
+  function spend(seconds) {
+    if (!timed()) return;
+    state.clock = Math.max(0, state.clock - seconds);
+    renderClock();
+    if (state.clock <= 0) gameOver('time');
+  }
+  function tick() {
+    const now = performance.now(), dt = (now - lastTick) / 1000;
+    lastTick = now;
+    // O relógio para enquanto há um diálogo aberto ou a aba está escondida.
+    if (!timed() || document.hidden || document.querySelector('dialog[open]')) return;
+    spend(Math.min(dt, 1));
+    if (Math.floor(state.clock) % 5 === 0) save();
+  }
+
   // ---------- Ações ----------
   function say(text, tone = '', animate = true) {
     statusText = text; statusTone = tone;
@@ -228,7 +262,7 @@
   function select(uid, fromKeyboard = false) {
     selected = uid; workTap = null;
     const why = E.whyNoRoom(state.round, week(), items(), uid);
-    if (E.isWork(uid)) say('Dia de trabalho: leve para outro horário ou outro dia. O trabalho não sai da semana; o ônibus e o almoço vão junto.');
+    if (E.isWork(uid)) say('Dia de trabalho: mova para outro horário ou dia, faça hora extra ou mude o almoço. O trabalho não sai da semana.');
     else if (why) say(why, 'error');
     else {
       const it = E.itemOf(items(), uid);
@@ -242,19 +276,41 @@
     return uid;
   }
   function remember() { history.push(JSON.parse(JSON.stringify(week()))); if (history.length > 40) history.shift(); }
+  function bump() { const score = $('score'); score.classList.remove('bump'); void score.offsetWidth; score.classList.add('bump'); }
   function place(uid, day, start) {
     const result = E.move(state.round, week(), items(), uid, day, start);
     if (!result.ok) { say(result.reason, 'error'); drawBoard(); return false; }
     remember();
     state.weeks[state.round] = result.week;
     selected = null; hover = null;
-    const span = E.spanOf(state.round, items(), uid), n = E.stats(state.round, week(), items()).count;
-    if (E.isWork(uid)) say(`Trabalho: ${E.DAYS[day].toLowerCase()}, ${range(start, start + span)}, com ônibus${E.workHoursOf(state.round, uid) === 8 ? ' e almoço' : ''}.`, 'good');
+    const span = spanOf(uid), n = E.stats(state.round, week(), items()).count;
+    if (E.isWork(uid)) say(`Trabalho: ${E.DAYS[day].toLowerCase()}, ${range(start, start + span)}, com transporte.`, 'good');
     else say(`${itemLabel(E.itemOf(items(), uid))}: ${E.DAYS[day].toLowerCase()}, ${range(start, start + span)}.${n === N() ? ' Coube tudo!' : ''}`, 'good');
     save(); renderGame();
-    if (!E.isWork(uid)) { const score = $('score'); score.classList.remove('bump'); void score.offsetWidth; score.classList.add('bump'); }
+    if (!E.isWork(uid)) bump();
     if (!reduceMotion) { pop = { uid, t0: performance.now() }; requestAnimationFrame(animatePop); }
     return true;
+  }
+  const LAW_SOURCE = '<a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" target="_blank" rel="noopener noreferrer">CLT no Planalto</a>';
+  function law(text, withFlavio) {
+    $('law-text').textContent = text;
+    $('law-flavio').textContent = withFlavio ? 'Na PEC 12/2026, que Flávio apoia, o contrato individual pode valer mais que a convenção coletiva.' : '';
+    $('law-source').innerHTML = `Fonte: ${LAW_SOURCE}${withFlavio ? ' · <a href="https://jornaldebrasilia.com.br/noticias/economia/entenda-as-propostas-pelo-fim-da-escala-6x1-de-flavio-bolsonaro-e-lula/" target="_blank" rel="noopener noreferrer">Jornal de Brasília, 7/10/2026</a>' : ''}.`;
+    openDialog('law-dialog');
+  }
+  function editWork(change) {
+    const uid = selected, r = E.editWork(state.round, week(), items(), uid, change);
+    if (!r.ok) {
+      if (r.code === 'clt71') { law(r.reason, true); say('A CLT não deixa: mais de 6h seguidas pede intervalo.', 'error', false); }
+      else if (r.code === 'clt59') { law(r.reason, false); say('A CLT não deixa mais de 2h extras por dia.', 'error', false); }
+      else say(r.reason, 'error');
+      return;
+    }
+    remember();
+    state.weeks[state.round] = r.week;
+    const w = r.work, h = E.workHoursOf(state.round, uid);
+    say(`Trabalho de ${E.DAYS[w.day].toLowerCase()}: ${h + w.extra}h${w.extra ? ` (${w.extra}h extra)` : ''}, ${w.lunch ? `almoço depois de ${w.lunchAt}h de trabalho` : 'sem almoço'}.`, 'good');
+    save(); renderGame();
   }
   function removePlan(uid) {
     if (!week().plans.some(p => p.uid === uid)) return;
@@ -266,7 +322,7 @@
   }
   function deleteItem(uid) {
     const it = E.itemOf(items(), uid);
-    if (!it || state.step !== 0) return;
+    if (!it || state.round !== 0) return;
     state.items = items().filter(x => x.uid !== uid);
     state.weeks = state.weeks.map(w => (w ? E.unplace(w, uid) : w));
     history = []; if (selected === uid) selected = null;
@@ -291,7 +347,7 @@
       const cur = placedOf(selected);
       if (start !== null && !(hit && hit.uid === selected && cur && cur.day === pt.day && cur.start === start)) { place(selected, pt.day, start); return; }
       if (hit && E.isWork(hit.uid) && !E.isWork(selected) && workTap !== hit.uid) {
-        // Primeiro toque no trabalho explica; o segundo seleciona o dia de trabalho para mover.
+        // Primeiro toque no trabalho explica; o segundo seleciona o dia de trabalho para mexer.
         workTap = hit.uid; say(`${hit.reason} Para mexer no trabalho, toque nele de novo.`, 'error'); drawBoard(); return;
       }
       if (hit && hit.uid !== selected) { select(hit.uid); return; }
@@ -308,15 +364,8 @@
     if (start !== null) place(uid, pt.day, start);
     else { selected = uid; renderGame(); say(E.whyNotHere(state.round, week(), items(), uid, pt.day, pt.hour), 'error'); drawBoard(); }
   }
-  function notice(emoji, title, text, impact, button) {
-    $('event-emoji').textContent = emoji;
-    $('event-title').textContent = title;
-    $('event-text').textContent = text;
-    $('event-impact').textContent = impact;
-    $('event-ok').innerHTML = `${button} <span aria-hidden="true">→</span>`;
-    openDialog('event-dialog');
-  }
   function askFinish() {
+    if (state.round === 0) { gameOver('closed'); return; }
     const st = E.stats(state.round, week(), items());
     if (st.count === N()) { finish(); return; }
     $('finish-detail').textContent = `Coube ${st.count} de ${N()}. Fica de fora: ${E.joinList(st.left.map(uid => itemLabel(E.itemOf(items(), uid))))}.`;
@@ -324,40 +373,74 @@
   }
   function finish() {
     closeDialog($('finish-dialog'));
-    state.mode = state.step ? 'results' : 'between';
-    selected = null; history = []; share.ready = null; save(); render(); focusHeading();
+    state.mode = 'results'; selected = null; history = []; share.ready = null; save(); render(); focusHeading();
   }
-  function choose(first) {
-    const keepItems = resumeMode ? E.starterItems() : items();
-    state = fresh();
-    state.items = keepItems.length ? keepItems : E.starterItems();
-    state.first = first; state.round = first; state.weeks[first] = E.newWeek(first);
-    state.mode = 'playing'; resumeMode = null; selected = null; history = [];
-    say(firstHint()); save(); render(); focusHeading();
-    if (!storageOK) say('Seu navegador não deixou salvar. Dá para jogar normalmente com a página aberta.');
+
+  // ---------- Game over da 6×1 ----------
+  function gameOver(why) {
+    if (state.mode !== 'playing' || state.round !== 0) return;
+    state.mode = 'gameover'; selected = null; pointer = null; hover = null;
+    save(); renderGame(); showGameOver(why);
   }
-  function switchVote() {
-    const to = 1 - state.first, carried = E.carryOver(state.weeks[state.first], to, items());
-    state.step = 1; state.round = to; state.weeks[to] = carried.week;
-    state.mode = 'playing'; selected = null; history = []; share.ready = null;
-    say(to === 1
-      ? `Com ${who(1)}, são 5 dias de trabalho: um dia inteiro a mais pra você. Encaixe o que ficou de fora.`
-      : `Com ${who(0)}, volta um dia de trabalho de 4h. Veja o que ainda cabe.`);
-    save(); render(); focusHeading();
-    if (to === 0) {
-      const w = state.weeks[0].work.find(x => E.workHoursOf(0, x.uid) === 4);
-      notice('🏭', `Com ${who(0)}, mais um dia de trabalho.`, `Voltam 4h de trabalho, com ônibus, ${onDay(w.day)}, das 8h às 14h. Dá para mudar o horário, mas não dá para tirar.`,
-        carried.removed.length ? `Saiu da sua semana: ${E.joinList(carried.removed.map(p => itemLabel(E.itemOf(items(), p.uid))))}.` : 'Seus planos continuam no lugar. Só sobrou menos tempo.', 'Reorganizar');
+  function showGameOver(why = 'time') {
+    const st = E.stats(0, state.weeks[0], items());
+    $('go-why').textContent = why === 'closed' ? 'Você fechou a semana. A 6×1 fecha você.' : 'O tempo acabou. A semana também.';
+    $('go-score').innerHTML = st.count === N()
+      ? `Coube tudo, mas sobraram ${st.free - st.planned}h livres na semana inteira.`
+      : st.left.length > 4
+        ? `Coube ${st.count} de ${N()}. <b>Ficaram de fora ${st.left.length} coisas:</b> ${st.left.map(uid => E.itemOf(items(), uid).emoji).join(' ')}`
+        : `Coube ${st.count} de ${N()}. <b>Ficou de fora:</b> ${E.joinList(st.left.map(uid => itemLabel(E.itemOf(items(), uid))))}.`;
+    $('go-ask').hidden = false; $('go-answer').hidden = true;
+    openDialog('gameover-dialog');
+    // Foco no título, para nenhuma resposta parecer marcada de antemão.
+    $('go-title').focus({ preventScroll: true });
+  }
+  function answer(yes) {
+    $('go-ask').hidden = true; $('go-answer').hidden = false;
+    $('go-again').hidden = !yes;
+    if (yes) {
+      $('go-reply').textContent = 'Então segunda-feira começa tudo de novo.';
+      $('go-text').textContent = 'Seis dias de trabalho, um de folga. E o relógio volta a correr.';
+      $('go-lula').innerHTML = `Ver como seria com ${who(1)} <span aria-hidden="true">→</span>`;
+    } else {
+      $('go-reply').textContent = state.vote === 0 ? 'Se arrependeu? Você ainda pode mudar seu voto.' : 'Existe vida além do trabalho.';
+      $('go-text').textContent = `Com ${who(1)}, a mesma vida na 5×2: 40h de trabalho, um dia inteiro a mais de folga e sem relógio. Seus planos vão junto.`;
+      $('go-lula').innerHTML = state.vote === 0 ? `Mudar meu voto para ${who(1)} <span aria-hidden="true">→</span>` : `Ver a semana com ${who(1)} <span aria-hidden="true">→</span>`;
     }
+    $('go-lula').focus();
+  }
+  function againSixOne() {
+    closeDialog($('gameover-dialog'));
+    state.mode = 'playing'; state.clock = E.CLOCK_SECONDS; history = [];
+    say('Mais uma semana na 6×1. O relógio voltou a correr.', 'error', false);
+    save(); render(); focusHeading();
+  }
+  function toLula() {
+    closeDialog($('gameover-dialog'));
+    const carried = E.carryOver(state.weeks[0], 1, items());
+    state.round = 1; state.weeks[1] = carried.week; state.mode = 'playing'; selected = null; history = []; share.ready = null;
+    say(`Com ${who(1)}, são 5 dias de trabalho e um dia inteiro a mais pra você. Sem relógio. Encaixe o que ficou de fora.`);
+    save(); render(); focusHeading();
+  }
+  function choose(vote) {
+    const keep = resumeMode ? E.starterItems() : items();
+    state = fresh();
+    state.items = keep.length ? keep : E.starterItems();
+    state.vote = vote; state.round = 0; state.weeks[0] = E.newWeek(0); state.mode = 'playing';
+    resumeMode = null; selected = null; history = []; lastTick = performance.now();
+    say(vote === 0 ? `Você escolheu ${who(0)}: a semana é 6×1. Monte sua vida antes que o tempo acabe.` : `Você escolheu ${who(1)}. Mas hoje a semana ainda é 6×1: monte sua vida antes que o tempo acabe.`);
+    save(); render(); focusHeading();
+    if (!storageOK) say('Seu navegador não deixou salvar. Dá para jogar normalmente com a página aberta.');
   }
   function resume() {
     if (!resumeMode) return;
-    state.mode = resumeMode; resumeMode = null;
-    if (state.mode === 'playing' && !statusText) say(firstHint());
+    state.mode = resumeMode; resumeMode = null; lastTick = performance.now();
+    if (!statusText) say(firstHint());
     render(); focusHeading();
+    if (state.mode === 'gameover') showGameOver('time');
   }
   const firstHint = () => (isWide()
-    ? 'Escolha um plano ao lado (ou arraste) e solte num espaço livre. Tudo se move, até o trabalho.'
+    ? 'Escolha um plano na lista (ou arraste) e solte num espaço livre. Tudo se move, até o trabalho.'
     : 'Toque num plano e depois num espaço livre. Tudo se move, até o trabalho.');
   function restart() {
     closeDialog($('restart-dialog'));
@@ -371,13 +454,12 @@
 
   // ---------- Telas ----------
   function render() {
-    const screen = state.mode === 'playing' ? 'game' : state.mode;
+    const screen = state.mode === 'playing' || state.mode === 'gameover' ? 'game' : state.mode;
     document.body.dataset.screen = screen;
     document.body.dataset.round = String(state.round);
-    for (const id of ['intro', 'game', 'between', 'results']) $(id).hidden = id !== screen;
+    for (const id of ['intro', 'game', 'results']) $(id).hidden = id !== screen;
     if (screen === 'intro') $('resume-button').hidden = !resumeMode;
     else if (screen === 'game') renderGame();
-    else if (screen === 'between') renderBetween();
     else renderResults();
   }
   function renderGame() {
@@ -386,11 +468,13 @@
     $('week-scale').textContent = sc.scale;
     $('week-step').textContent = `Com ${who(state.round)}`;
     $('band-icon-use').setAttribute('href', state.round ? '#star' : '#arminha');
-    $('week-sub').textContent = `${sc.work.length} dias de trabalho · ${sc.workHours}h`;
+    $('week-sub').textContent = state.round ? `${sc.work.length} dias de trabalho · vida além do trabalho` : `${sc.work.length} dias de trabalho · ${st.work}h`;
     $('score').textContent = String(st.count);
     $('score-total').textContent = `/${N()}`;
+    $('list-count').textContent = `${N()} coisas · ${items().reduce((n, it) => n + it.hours, 0)}h`;
     $('undo-button').disabled = history.length === 0;
-    const add = state.step === 0 ? '<button class="chip add-chip" id="add-chip" aria-label="Adicionar à lista"><span class="emoji" aria-hidden="true">＋</span><span class="name short">Mais coisas</span><span class="name full">Pôr mais coisas na lista</span></button>' : '';
+    renderClock();
+    const add = state.round === 0 ? '<button class="chip add-chip" id="add-chip" aria-label="Pôr mais coisas na lista"><span class="emoji" aria-hidden="true">＋</span><span class="name short">Mais coisas</span><span class="name full">Pôr mais coisas na lista</span></button>' : '';
     $('tray').innerHTML = add + items().map(it => {
       const p = week().plans.find(x => x.uid === it.uid);
       const where = p ? `${E.DAYS[p.day]}, ${range(p.start, p.start + it.hours)}` : 'fora da semana';
@@ -408,21 +492,28 @@
     picker.hidden = !selected;
     if (!selected) { picker.innerHTML = ''; return; }
     const work = E.isWork(selected), it = work ? null : E.itemOf(items(), selected);
-    const span = E.spanOf(state.round, items(), selected), cur = placedOf(selected);
+    const span = spanOf(selected), cur = placedOf(selected);
     const slots = E.runStarts(state.round, week(), items(), selected);
     picker.style.setProperty('--c', work ? 'var(--work)' : `var(--plan-${it.color})`);
-    const title = work ? `Dia de trabalho · ${E.workHoursOf(state.round, selected)}h` : it.name;
+    let title = work ? `Trabalho · ${E.workHoursOf(state.round, selected) + cur.extra}h` : it.name;
+    let tools = '';
+    if (work) {
+      tools = `<button class="tool" data-work="extra-" aria-label="Menos hora extra">− 1h</button><button class="tool" data-work="extra+" aria-label="Mais uma hora extra">+ 1h extra</button>` +
+        (cur.lunch
+          ? `<button class="tool" data-work="lunch-off">Tirar almoço</button><button class="tool" data-work="lunch-" aria-label="Almoço mais cedo">◀ Almoço</button><button class="tool" data-work="lunch+" aria-label="Almoço mais tarde">Almoço ▶</button>`
+          : `<button class="tool" data-work="lunch-on">Pôr almoço</button>`);
+    }
     picker.innerHTML = `<div class="picker-head"><span class="emoji" aria-hidden="true">${work ? '💼' : it.emoji}</span><b>${title}</b><span class="plan-hours">${span}h</span><span class="spacer"></span>` +
       `<button class="picker-close" data-close-picker aria-label="Fechar">×</button></div>` +
-      `<div class="slots" role="group" aria-label="Espaços livres">` +
+      `<div class="slots" role="group" aria-label="${work ? 'Mexer no dia de trabalho' : 'Espaços livres'}">` + tools +
       (!work && cur ? `<button class="remove-button" data-remove="${selected}">Tirar da semana</button>` : '') +
       slots.map(o => `<button class="slot${cur && cur.day === o.day && cur.start === o.start ? ' current' : ''}" data-day="${o.day}" data-start="${o.start}" aria-label="${E.DAYS[o.day]}, das ${o.start} às ${o.start + span} horas">${E.SHORT_DAYS[o.day]} ${range(o.start, o.start + span)}</button>`).join('') +
       (!slots.length && !cur ? '<p class="no-room">Libere espaço: toque em algo encaixado para mover ou tirar.</p>' : '') +
-      (!work && state.step === 0 ? `<button class="remove-button ghost" data-delete="${selected}">Excluir da lista</button>` : '') +
+      (!work && state.round === 0 ? `<button class="remove-button ghost" data-delete="${selected}">Excluir da lista</button>` : '') +
       '</div>';
   }
   function renderAccessible() {
-    const all = E.blocks(state.round, week(), items()).map(b => ({ ...b, text: b.kind === 'plan' ? `${E.itemOf(items(), b.uid).name} (plano)` : { work: 'trabalho', commute: 'ônibus', lunch: 'almoço' }[b.kind] }));
+    const all = E.blocks(state.round, week(), items()).map(b => ({ ...b, text: b.kind === 'plan' ? `${E.itemOf(items(), b.uid).name} (plano)` : { work: 'trabalho', commute: 'transporte', lunch: 'almoço' }[b.kind] }));
     $('accessible-board').innerHTML = `<h2>Agenda da semana ${E.SCENARIOS[state.round].scale}</h2>` + E.DAYS.map((name, d) => {
       const list = all.filter(b => b.day === d).sort((a, b) => a.start - b.start).map(b => `${range(b.start, b.end)} ${b.text.toLowerCase()}`);
       return `<p>${name}: ${list.length ? list.join('; ') : 'livre'}; 23h–7h sono.</p>`;
@@ -444,28 +535,6 @@
     c.setAttribute('aria-label', `Semana ${E.SCENARIOS[round].scale}: ${state.weeks[round].plans.map(p => `${E.itemOf(items(), p.uid).name}, ${E.DAYS[p.day].toLowerCase()} ${p.start}h`).join('; ') || 'nenhum plano'}.`);
   }
   const leftList = round => items().filter(it => !state.weeks[round].plans.some(p => p.uid === it.uid)).map(itemLabel).join(' · ');
-  function renderBetween() {
-    const r = state.first, n = E.stats(r, state.weeks[r], items()).count, other = 1 - r;
-    $('between-card').className = `id-card id-${r}`;
-    $('between-scale').textContent = E.SCENARIOS[r].scale;
-    $('between-who').textContent = `Com ${who(r)}`;
-    $('between-title').textContent = n === N() ? 'Coube tudo.' : `Coube ${n} de ${N()}.`;
-    $('between-left').innerHTML = n < N() ? `<b>Ficou de fora:</b> ${leftList(r)}` : 'Tudo da sua lista achou lugar na semana.';
-    $('switch-card').className = `switch-card to-${other}`;
-    if (r === 0) {
-      $('switch-title').textContent = 'Se arrependeu? Você ainda pode mudar seu voto.';
-      $('switch-text').textContent = `Com ${who(1)}, a mesma vida na 5×2: 40h de trabalho e um dia inteiro a mais pra você. Seus planos vão junto.`;
-      $('switch-button').innerHTML = `Mudar meu voto para ${who(1)} <span aria-hidden="true">→</span>`;
-    } else {
-      $('switch-title').textContent = `E se fosse o ${who(0)}?`;
-      $('switch-text').textContent = 'A mesma vida na 6×1: 44h de trabalho e mais um dia no serviço.';
-      $('switch-button').innerHTML = `Ver a semana com ${who(0)} <span aria-hidden="true">→</span>`;
-    }
-    // Para quem escolheu Flávio, o convite a mudar o voto vem antes do compartilhar.
-    $('between').classList.toggle('switch-first', r === 0);
-    drawThumb('between-thumb', r);
-    prepareShare();
-  }
   function renderResults() {
     const a = E.stats(0, state.weeks[0], items()), b = E.stats(1, state.weeks[1], items());
     const max0 = E.maxPlans(0, items()), max1 = E.maxPlans(1, items());
@@ -478,21 +547,21 @@
     $('results-left').innerHTML = lines.join('<br>');
     let insight;
     if (max0 < N()) {
-      insight = a.count >= max0
-        ? `Você jogou certinho: com a sua lista, na 6×1 cabem no máximo ${max0} de ${N()}, mesmo mexendo no horário do trabalho.`
-        : `Com a sua lista, na 6×1 cabem no máximo ${max0} de ${N()}, mesmo mexendo no horário do trabalho.`;
+      insight = `Com a sua lista, na 6×1 cabem no máximo ${max0} de ${N()}, mesmo mexendo no horário do trabalho e sem relógio.`;
       insight += max1 === N() ? ' Na 5×2, cabe tudo. Não é falta de organização. É falta de tempo.' : ` Na 5×2, cabem ${max1}. Não é falta de organização. É falta de tempo.`;
     } else {
       insight = `Sua lista cabe nas duas semanas. Mas na 6×1 sobra menos: ${a.free}h livres contra ${b.free}h na 5×2, e só um dia inteiro de folga.`;
     }
+    if (a.extra) insight += ` E você ainda fez ${a.extra}h de hora extra na 6×1.`;
     $('results-insight').textContent = insight;
-    $('gain-hours').textContent = `+${b.free - a.free}h`;
-    $('gain-text').textContent = `livres por semana na 5×2: ${a.work - b.work}h a menos de trabalho e ${a.commute - b.commute}h a menos de ônibus. E um dia inteiro a mais de folga.`;
+    const gain = b.free - a.free;
+    $('gain-hours').textContent = `${gain >= 0 ? '+' : ''}${gain}h`;
+    $('gain-text').textContent = `de vida além do trabalho por semana na 5×2, do jeito que você montou. E um dia inteiro a mais de folga.`;
     drawThumb('thumb-0', 0); drawThumb('thumb-1', 1);
     prepareShare();
   }
   function focusHeading() {
-    const target = { intro: 'intro-title', playing: 'week-title', between: 'between-title', results: 'results-title' }[state.mode];
+    const target = { intro: 'intro-title', playing: 'week-title', gameover: 'week-title', results: 'results-title' }[state.mode];
     const el = $(target); el.tabIndex = -1; el.focus({ preventScroll: true });
     window.scrollTo(0, 0);
   }
@@ -554,7 +623,7 @@
   }
   async function buildShareImage() {
     try { await document.fonts.load(`80px ${DISPLAY}`); } catch { /* Sem Anton, usa a reserva. */ }
-    const C = theme(), W = 1080, H = 1920, c = document.createElement('canvas'), rounds = playedRounds();
+    const C = theme(), W = 1080, H = 1920, c = document.createElement('canvas');
     c.width = W; c.height = H;
     const g = c.getContext('2d');
     g.fillStyle = C.paper; g.fillRect(0, 0, W, H);
@@ -564,28 +633,25 @@
     g.strokeStyle = C.ink; g.lineWidth = 8; rr(g, 0, 0, bw, 118, 14); g.stroke();
     g.fillStyle = C.ink; g.fillText('FOLGA', 22, 102);
     g.restore();
-    g.fillStyle = C.muted; g.font = `700 30px ${SANS}`; g.textAlign = 'right'; g.fillText('UM JOGO SOBRE TEMPO', W - 80, 272);
+    g.fillStyle = C.muted; g.font = `700 30px ${SANS}`; g.textAlign = 'right'; g.fillText('VIDA ALÉM DO TRABALHO', W - 80, 272);
     g.fillStyle = C.ink; g.textAlign = 'left'; g.font = `96px ${DISPLAY}`;
     g.fillText('MINHA SEMANA', 80, 416);
-    const second = rounds.length === 2 ? `COM ${who(0)} E COM ${who(1)}`.toUpperCase() : `COM ${who(rounds[0])} (${E.SCENARIOS[rounds[0]].scale})`.toUpperCase();
+    const second = `COM ${who(0)} E COM ${who(1)}`.toUpperCase();
     fitFont(g, second, 96, W - 160, DISPLAY);
     g.fillText(second, 80, 540);
     const panelY = 574, boardH = 560;
-    const panelH = rounds.length === 2
-      ? Math.max(sharePanel(g, 0, 70, panelY, 452, boardH), sharePanel(g, 1, W - 70 - 452, panelY, 452, boardH))
-      : sharePanel(g, rounds[0], 190, panelY, 700, boardH);
-    const focus = rounds.includes(0) ? 0 : rounds[0], cand = who(focus).toUpperCase();
+    const panelH = Math.max(sharePanel(g, 0, 70, panelY, 452, boardH), sharePanel(g, 1, W - 70 - 452, panelY, 452, boardH));
     let y = panelY + panelH + 72;
-    const left = items().filter(it => !state.weeks[focus].plans.some(p => p.uid === it.uid));
+    const left = items().filter(it => !state.weeks[0].plans.some(p => p.uid === it.uid));
     g.textAlign = 'left'; g.textBaseline = 'alphabetic';
     if (left.length) {
-      g.fillStyle = C.muted; g.font = `800 30px ${SANS}`; g.fillText(`COM ${cand}, FICOU DE FORA:`, 80, y);
+      g.fillStyle = C.muted; g.font = `800 30px ${SANS}`; g.fillText(`COM ${who(0).toUpperCase()}, FICOU DE FORA:`, 80, y);
       g.fillStyle = C.ink; g.font = `700 40px ${SANS}, ${EMOJI}`;
       let lines = wrapItems(g, left.map(itemLabel), '  ·  ', W - 160);
       if (lines.length > 2) lines = wrapItems(g, left.map(it => it.emoji), '  ', W - 160);
       for (const line of lines.slice(0, 2)) { y += 54; g.fillText(line, 80, y); }
     } else {
-      g.fillStyle = C.ink; g.font = `800 40px ${SANS}`; g.fillText(`COM ${cand}, COUBE TUDO.`, 80, y);
+      g.fillStyle = C.ink; g.font = `800 40px ${SANS}`; g.fillText(`COM ${who(0).toUpperCase()}, COUBE TUDO. NO LIMITE.`, 80, y);
     }
     const ctaY = Math.max(y + 42, 1500);
     g.fillStyle = C.ink; rr(g, 70, ctaY, W - 140, 150, 22); g.fill();
@@ -595,7 +661,7 @@
     return c;
   }
   function prepareShare() {
-    share.text = E.shareText(state.weeks, items(), playedRounds(), shareURL());
+    share.text = E.shareText(state.weeks, items(), [0, 1], shareURL());
     $('share-text').value = share.text;
     $('share-whatsapp').href = `https://wa.me/?text=${encodeURIComponent(share.text)}`;
     share.ready = (async () => {
@@ -639,10 +705,12 @@
   document.querySelectorAll('[data-about]').forEach(b => b.addEventListener('click', () => openDialog('about-dialog')));
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeDialog(b.closest('dialog'))));
   document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => {
-    if (e.target !== d || d.id === 'event-dialog') return;
+    if (e.target !== d || d.id === 'gameover-dialog') return;
     const r = d.getBoundingClientRect();
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closeDialog(d);
   }));
+  // O game over não fecha com Esc: a pergunta precisa de resposta.
+  $('gameover-dialog').addEventListener('cancel', e => e.preventDefault());
 
   $('tray').addEventListener('click', e => {
     if (e.target.closest('#add-chip')) { renderCatalog(); openDialog('add-dialog'); return; }
@@ -661,6 +729,10 @@
         const next = items().find(it => !week().plans.some(p => p.uid === it.uid));
         document.querySelector(`[data-task="${next ? next.uid : uid}"]`)?.focus({ preventScroll: true });
       }
+    } else if (b.dataset.work) {
+      const change = { 'extra+': { extra: 1 }, 'extra-': { extra: -1 }, 'lunch-off': { lunch: false }, 'lunch-on': { lunch: true }, 'lunch-': { lunchAt: -1 }, 'lunch+': { lunchAt: 1 } }[b.dataset.work];
+      editWork(change);
+      document.querySelector(`[data-work="${b.dataset.work}"]`)?.focus({ preventScroll: true });
     } else if (b.dataset.remove) removePlan(b.dataset.remove);
     else if (b.dataset.delete) deleteItem(b.dataset.delete);
     else if (b.dataset.closePicker !== undefined) {
@@ -682,6 +754,10 @@
     state.nextId += 1;
     if (addItem(it)) { $('custom-name').value = ''; $('custom-status').textContent = `${itemLabel(it)} entrou na lista.`; }
   });
+  $('go-yes').addEventListener('click', () => answer(true));
+  $('go-no').addEventListener('click', () => answer(false));
+  $('go-again').addEventListener('click', againSixOne);
+  $('go-lula').addEventListener('click', toLula);
 
   // Arrastar (mouse e toque): da lista para o calendário, ou algo já encaixado (inclusive o trabalho).
   function beginPointer(e, source, id) {
@@ -689,11 +765,11 @@
   }
   $('tray').addEventListener('pointerdown', e => {
     const chip = e.target.closest('[data-task]');
-    if (!chip || e.button > 0) return;
+    if (!chip || e.button > 0 || state.mode !== 'playing') return;
     beginPointer(e, 'chip', chip.dataset.task);
   });
   board.addEventListener('pointerdown', e => {
-    if (e.button > 0 || document.querySelector('dialog[open]')) return;
+    if (e.button > 0 || state.mode !== 'playing' || document.querySelector('dialog[open]')) return;
     const pt = boardPoint(e.clientX, e.clientY), hit = pt && blockAt(pt);
     beginPointer(e, 'board', hit ? hit.uid : null);
     pointer.pt = pt;
@@ -728,6 +804,7 @@
     const p = pointer;
     pointer = null;
     $('drag-ghost').hidden = true;
+    if (state.mode !== 'playing') return;
     if (p.moved) {
       if (p.source === 'chip') suppressClick = true;
       setTimeout(() => { suppressClick = false; }, 0);
@@ -740,8 +817,6 @@
   $('undo-button').addEventListener('click', undo);
   $('finish-button').addEventListener('click', askFinish);
   $('confirm-finish').addEventListener('click', finish);
-  $('event-ok').addEventListener('click', () => closeDialog($('event-dialog')));
-  $('switch-button').addEventListener('click', switchVote);
   $('replay-button').addEventListener('click', () => openDialog('restart-dialog'));
   $('confirm-restart').addEventListener('click', restart);
   document.querySelectorAll('[data-share]').forEach(b => b.addEventListener('click', openShare));
@@ -772,26 +847,30 @@
   window.addEventListener('resize', () => {
     drawBoard();
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { if (state.mode === 'results') { drawThumb('thumb-0', 0); drawThumb('thumb-1', 1); } else if (state.mode === 'between') drawThumb('between-thumb', state.first); }, 120);
+    resizeTimer = setTimeout(() => { if (state.mode === 'results') { drawThumb('thumb-0', 0); drawThumb('thumb-1', 1); } }, 120);
   });
+  document.addEventListener('visibilitychange', () => { lastTick = performance.now(); save(); });
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { drawBoard(); });
+  lastTick = performance.now();
+  setInterval(tick, 250);
 
   // Ganchos de teste: estado em texto e geometria do calendário (px CSS, origem no canto superior esquerdo do canvas).
   window.render_game_to_text = () => {
     const rect = board.getBoundingClientRect(), wk = week();
     return JSON.stringify({
-      mode: state.mode, round: state.round, first: state.first, step: state.step, scale: E.SCENARIOS[state.round].scale,
+      mode: state.mode, round: state.round, vote: state.vote, clock: Math.round(state.clock * 10) / 10, scale: E.SCENARIOS[state.round].scale,
       candidate: who(state.round), selected, dialog: document.querySelector('dialog[open]')?.id || null, status: statusText, statusTone,
       resumeMode, storageAvailable: storageOK, historyLength: history.length,
       items: items().map(it => ({ uid: it.uid, name: it.name, hours: it.hours, custom: !it.ref })),
       week: wk, weeks: state.weeks, stats: [0, 1].map(r => (state.weeks[r] ? E.stats(r, state.weeks[r], items()) : null)),
       maxPlans: [E.maxPlans(0, items()), E.maxPlans(1, items())],
       options: selected && wk ? E.allOptions(state.round, wk, items(), selected) : [],
-      board: geo && state.mode === 'playing' ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, firstHour: FIRST, ...geo } : null,
+      board: geo && state.mode !== 'results' && state.mode !== 'intro' ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, firstHour: FIRST, ...geo } : null,
       share: { text: share.text, whatsapp: $('share-whatsapp').getAttribute('href'), imageBytes: share.size || 0, nativeShare: !$('share-native').hidden }
     });
   };
-  window.advanceTime = () => { drawBoard(); return Promise.resolve(); };
+  // Avança o relógio da semana (para testes e para o cliente de automação).
+  window.advanceTime = ms => { spend((ms || 0) / 1000); drawBoard(); return Promise.resolve(); };
 
   render();
 })();

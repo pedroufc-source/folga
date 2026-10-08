@@ -4,9 +4,9 @@ Este arquivo orienta assistentes de código (Claude Code, Codex, Cursor, Copilot
 
 ## O projeto
 
-FOLGA é um jogo estático para o segundo turno de 2026. A primeira página diz: "Você trabalha na escala 6×1 e vai votar. Qual é o seu candidato?". Quem escolhe **Flávio** monta a semana **6×1** (44h, seis dias de trabalho); quem escolhe **Lula**, a **5×2** (40h, cinco dias). No fim aparece "Se arrependeu? Você ainda pode mudar seu voto", que leva à semana do outro, com os mesmos planos. O resultado vira imagem para Stories/WhatsApp. Publicado pelo GitHub Pages a partir de `main`: https://pedroufc-source.github.io/folga/
+FOLGA é um jogo estático para o segundo turno de 2026. A primeira página diz "Você trabalha na escala 6×1. Qual é o seu candidato?", mas **todo mundo vive primeiro a semana 6×1** (a do Flávio, 44h, seis dias de trabalho), com **2 minutos no relógio**. Quando o tempo acaba (ou a semana é fechada), vem o **GAME OVER**: "Tá cansado? Você é a favor da escala 6×1?". "Não" leva à semana **5×2 do Lula** (40h, cinco dias, sem relógio), com os mesmos planos; para quem escolheu Flávio, a frase é "Se arrependeu? Você ainda pode mudar seu voto". "Sim" recomeça a 6×1, com saída para o Lula. O resultado compara as duas semanas e vira imagem para Stories/WhatsApp. Publicado pelo GitHub Pages a partir de `main`: https://pedroufc-source.github.io/folga/
 
-**Tudo se move.** Os dias de trabalho (com ônibus e almoço), os planos e o dia de folga vão para qualquer dia e hora, das 7h às 23h. A escala só define quantos dias de trabalho existem. A lista de planos é do jogador: começa com 13 sugestões (50h), há um catálogo com mais e dá para criar itens próprios. O tom é **sem moralismo**: app de relacionamento, motel, bet, karaokê e culto entram do mesmo jeito que faxina e mercado.
+**Tudo se move.** Os dias de trabalho, os planos e a folga vão para qualquer dia e hora, das 7h às 23h. O dia de trabalho é transporte + trabalho + almoço + trabalho + transporte: dá para fazer hora extra (até 2h, CLT art. 59) e mudar o almoço de lugar ou tirá-lo, mas o jogo barra qualquer trecho de trabalho acima de 6h seguidas (CLT art. 71) e mostra o contraponto da PEC 12/2026. A lista de planos é do jogador: 13 sugestões iniciais (50h), catálogo com mais e itens próprios. O tom é **sem moralismo**. Uma conversa com o patrão (chatbot) ficou para uma segunda versão.
 
 ## Comandos
 
@@ -23,7 +23,7 @@ Rode `npm test` e `npm run test:ui` depois de qualquer mudança. Se mexer em lay
 ## Arquivos
 
 - `engine.js`: regras puras (`window.FolgaEngine`): escalas, dias de trabalho, catálogo e lista inicial, encaixes, trocas de escala (`carryOver`), contas, máximo possível (`maxPlans`) e texto de compartilhamento. Testado em `tests/engine.test.cjs`.
-- `app.js`: interface (escolha do candidato, calendário em canvas, lista de planos, diálogo de sugestões, `localStorage`, imagem 1080×1920 de compartilhamento).
+- `app.js`: interface (primeira página, relógio e game over da 6×1, calendário em canvas, lista de planos, edição do dia de trabalho, diálogo de sugestões, `localStorage`, imagem 1080×1920 de compartilhamento). `window.advanceTime(ms)` avança o relógio (testes).
 - `styles.css`: visual; **todas as cores são tokens em `:root`**. `index.html`: marcação, metatags de preview e diálogo "Como funciona" com as fontes.
 - `REFERENCIAS.md`: fontes e o que é premissa do modelo. `tools/`: gerador do `og.png`.
 
@@ -36,7 +36,7 @@ Rode `npm test` e `npm run test:ui` depois de qualquer mudança. Se mexer em lay
 ## Regras invioláveis
 
 ### Conteúdo
-1. **Nunca invente fatos, números, datas, citações ou URLs.** O que o jogo diz sobre os candidatos e a PEC está no diálogo "Como funciona", com fonte, e em `REFERENCIAS.md`. Não escreva que Flávio votou contra o fim da 6×1: as fontes dizem que ele evitou dizer como vota. Antes de afirmar algo sobre a tramitação da PEC, reconfira na Agência Senado.
+1. **Nunca invente fatos, números, datas, citações ou URLs.** O que o jogo diz sobre os candidatos, a CLT, as PECs e o VAT está no diálogo "Como funciona" e no aviso da CLT, com fonte, e em `REFERENCIAS.md`. Não escreva que Flávio votou contra o fim da 6×1 (as fontes dizem que ele evita dizer o voto) nem que a PEC 12/2026 mantém a 6×1 ou acaba com o intervalo (as fontes divergem e não dizem isso). Antes de afirmar algo sobre a tramitação das PECs, reconfira na Agência Senado.
 2. Ligar Flávio à 6×1 e Lula à 5×2 é a premissa do jogo, decidida pelo dono do projeto; as frases que a sustentam ficam no diálogo, com fonte.
 3. O resto é **modelo**: horários, duração dos planos e sono são escolhas do jogo, não médias da população.
 4. Sem moralismo nem restrição: nenhum plano tem dia ou hora marcada, e nenhuma sugestão vem com julgamento.

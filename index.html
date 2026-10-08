@@ -53,7 +53,7 @@
         </button>
       </div>
       <button class="secondary" id="resume-button" hidden>Continuar minha semana <span aria-hidden="true">→</span></button>
-      <p class="fine">Depois, monte sua semana: trabalho, casa, rolê, amor, descanso. Tudo se move, e você põe o que quiser. <button class="link-button" data-about>Por que 6×1 e 5×2?</button></p>
+      <p class="fine"><b>Primeiro, todo mundo vive a semana 6×1. Você tem 2 minutos.</b> Trabalho, casa, rolê, amor, descanso: tudo se move. <button class="link-button" data-about>Por que 6×1 e 5×2?</button></p>
     </section>
 
     <section id="game" class="screen game" hidden aria-labelledby="week-title">
@@ -63,15 +63,18 @@
           <h1 id="week-title" tabindex="-1"><svg class="band-icon" aria-hidden="true"><use id="band-icon-use" href="#arminha"/></svg><span id="week-scale">6×1</span><span class="sr-only"> — </span><small id="week-step">Com Flávio</small></h1>
           <p id="week-sub">44h de trabalho · 1 folga</p>
         </div>
+        <p class="clock" id="clock" role="timer" aria-label="Tempo que resta na semana"><span aria-hidden="true">⏱</span> <b id="clock-text">2:00</b></p>
         <p class="score" aria-label="Planos encaixados"><strong id="score">0</strong><span id="score-total">/13</span></p>
         <button class="nav-button band-help" data-about aria-label="Como funciona"><span aria-hidden="true" class="nav-icon">?</span></button>
       </div>
+      <div class="clock-bar" aria-hidden="true"><i id="clock-bar"></i></div>
       <div class="play">
         <div class="board-area">
           <div class="board-wrap" id="board-wrap"><canvas id="board" role="img" aria-label="Calendário da semana"></canvas></div>
-          <p class="legend" aria-hidden="true"><span><i class="sw sw-work"></i>Trabalho</span><span><i class="sw sw-commute"></i>Ônibus</span><span><i class="sw sw-routine"></i>Almoço</span><span><i class="sw sw-free"></i>Livre</span><span class="legend-sleep">23h–7h: sono</span></p>
+          <p class="legend" aria-hidden="true"><span><i class="sw sw-work"></i>Trabalho</span><span><i class="sw sw-commute"></i>Transporte</span><span><i class="sw sw-routine"></i>Almoço</span><span><i class="sw sw-free"></i>Livre</span><span class="legend-sleep">23h–7h: sono</span></p>
         </div>
         <div class="dock" id="dock" data-mode="tray">
+          <p class="dock-title">Sua lista <span id="list-count"></span></p>
           <p id="status" class="status" role="status" aria-live="polite"></p>
           <div id="tray" class="tray" role="group" aria-label="Seus planos"></div>
           <div id="picker" class="picker" hidden></div>
@@ -82,23 +85,6 @@
         </div>
       </div>
       <div id="accessible-board" class="sr-only"></div>
-    </section>
-
-    <section id="between" class="screen summary" hidden aria-labelledby="between-title">
-      <div class="id-card" id="between-card">
-        <div class="id-head"><b id="between-scale">6×1</b><span id="between-who">Com Flávio</span></div>
-        <div class="id-body">
-          <h1 id="between-title" tabindex="-1"></h1>
-          <canvas class="thumb" id="between-thumb" role="img" aria-label="Sua semana"></canvas>
-          <p id="between-left" class="left-out"></p>
-        </div>
-      </div>
-      <div class="switch-card" id="switch-card">
-        <p class="switch-title" id="switch-title"></p>
-        <p id="switch-text"></p>
-        <button class="primary" id="switch-button"></button>
-      </div>
-      <button class="primary share-cta" data-share>Compartilhar minha semana <span aria-hidden="true">↗</span></button>
     </section>
 
     <section id="results" class="screen summary" hidden aria-labelledby="results-title">
@@ -123,31 +109,34 @@
     <p class="eyebrow">Como funciona</p>
     <h2 id="about-title">Você monta a semana</h2>
     <ol class="rules">
-      <li><b>Tudo se move.</b> Toque em algo e depois num espaço livre, em qualquer dia e hora. No computador, também dá para arrastar.</li>
-      <li><b>O trabalho não sai da semana</b>, mas você escolhe o horário e o dia. Cada dia de trabalho leva junto o ônibus (1h na ida, 1h na volta) e o almoço.</li>
-      <li><b>A lista é sua.</b> Use as sugestões ou crie o que quiser. Feche a semana quando quiser e veja a mesma vida com o outro candidato.</li>
+      <li><b>Primeiro, a 6×1.</b> Todo mundo vive a semana de seis dias de trabalho, com 2 minutos no relógio. Quando o tempo acaba, a semana acaba.</li>
+      <li><b>Tudo se move.</b> Toque em algo e depois num espaço livre. No dia de trabalho dá para fazer hora extra e mudar o almoço de lugar, dentro do que a CLT permite.</li>
+      <li><b>Depois, a 5×2.</b> A mesma vida, com um dia a mais de folga e sem relógio. A lista é sua: use as sugestões ou crie o que quiser.</li>
     </ol>
     <h3>Por que 6×1 e 5×2?</h3>
     <ul class="sources">
       <li><b>Lula</b> chamou a aprovação do fim da escala 6×1 na Câmara de “uma conquista histórica e civilizatória” e disse que o governo vai trabalhar pela aprovação no Senado. <a href="https://www.folhape.com.br/economia/fim-da-escala-6x1-e/490321/" target="_blank" rel="noopener noreferrer">Folha de Pernambuco, 28/5/2026</a>.</li>
       <li><b>Flávio</b> chamou a discussão de oportunista, defendeu que o trabalhador “monte a sua jornada” e receba por hora trabalhada, e tem evitado dizer se vota a favor ou contra a proposta. <a href="https://diariodocomercio.com.br/politica/flavio-bolsonaro-fim-6x1/" target="_blank" rel="noopener noreferrer">Folhapress/Diário do Comércio, 6/10/2026</a>.</li>
-      <li><b>A PEC</b> do fim da escala 6×1 propõe reduzir o limite de 44h para 40h semanais, com dois dias de descanso e sem redução de salário. Em outubro de 2026, está em discussão no Senado. <a href="https://www12.senado.leg.br/noticias/materias/2026/10/07/pec-do-fim-da-escala-6x1-passa-por-2a-sessao-de-discussao-no-plenario" target="_blank" rel="noopener noreferrer">Agência Senado, 7/10/2026</a>.</li>
-      <li>O limite atual, de 44h por semana, está na <a href="https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm" target="_blank" rel="noopener noreferrer">Constituição, art. 7º, XIII</a>.</li>
+      <li><b>A PEC 12/2026</b>, do senador Rogério Marinho (PL) e apoiada por Flávio, cria um regime de trabalho por hora, e nela o contrato individual pode valer mais que a convenção coletiva. <a href="https://jornaldebrasilia.com.br/noticias/economia/entenda-as-propostas-pelo-fim-da-escala-6x1-de-flavio-bolsonaro-e-lula/" target="_blank" rel="noopener noreferrer">Jornal de Brasília, 7/10/2026</a>.</li>
+      <li><b>A PEC do fim da 6×1</b> propõe reduzir o limite de 44h para 40h semanais, com dois dias de descanso e sem redução de salário. Em outubro de 2026, está em discussão no Senado. <a href="https://www12.senado.leg.br/noticias/materias/2026/10/07/pec-do-fim-da-escala-6x1-passa-por-2a-sessao-de-discussao-no-plenario" target="_blank" rel="noopener noreferrer">Agência Senado, 7/10/2026</a>.</li>
+      <li><b>A CLT</b> limita a jornada a 44h semanais (<a href="https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm" target="_blank" rel="noopener noreferrer">Constituição, art. 7º, XIII</a>), a hora extra a 2h por dia e exige intervalo de pelo menos 1h para quem trabalha mais de 6h seguidas (<a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" target="_blank" rel="noopener noreferrer">CLT, arts. 59 e 71</a>).</li>
     </ul>
+    <h3>Vida além do trabalho</h3>
+    <p>O fim da 6×1 virou pauta nacional com o movimento Vida Além do Trabalho (VAT), criado em 2023 por Rick Azevedo, que passou 12 anos como balconista de farmácia na 6×1 e reclamava de não ter tempo para estudar nem para o lazer (<a href="https://www.brasildefato.com.br/2026/05/27/rick-azevedo-idealizador-do-movimento-pelo-fim-da-escala-6x1-lanca-pre-candidatura-a-deputado-federal/" target="_blank" rel="noopener noreferrer">Brasil de Fato</a>). Em 4 de outubro de 2026, Rick foi eleito deputado federal pelo Rio, com 191.371 votos (<a href="https://www.cnnbrasil.com.br/eleicoes/rick-azevedo-e-eleito-deputado-federal-pelo-rio-de-janeiro/" target="_blank" rel="noopener noreferrer">CNN Brasil</a>).</p>
     <h3>Os números do jogo</h3>
     <table class="hours">
       <thead><tr><th scope="col">Horas por semana</th><th scope="col">6×1</th><th scope="col">5×2</th></tr></thead>
       <tbody>
         <tr><th scope="row">Trabalho</th><td>44</td><td>40</td></tr>
         <tr><th scope="row">Dias de trabalho</th><td>6</td><td>5</td></tr>
-        <tr><th scope="row">Ônibus (2h por dia de trabalho)</th><td>12</td><td>10</td></tr>
+        <tr><th scope="row">Transporte (2h por dia de trabalho)</th><td>12</td><td>10</td></tr>
         <tr><th scope="row">Almoço nos dias de 8h</th><td>5</td><td>5</td></tr>
         <tr><th scope="row">Sono (23h–7h)</th><td>56</td><td>56</td></tr>
         <tr class="total"><th scope="row">Livre para você</th><td>51</td><td>57</td></tr>
       </tbody>
     </table>
     <p>Na 6×1, são cinco dias de 8h e um de 4h. Na 5×2, cinco dias de 8h. A lista inicial tem 13 coisas, 50h no total.</p>
-    <p class="callout">É uma simulação para jogar, não uma média da população. A duração de cada plano é uma sugestão do jogo. Salário e renda não entram na conta.</p>
+    <p class="callout">É uma simulação para jogar, não uma média da população. A duração de cada plano é uma sugestão do jogo. Hora extra entra na conta do tempo, não do salário; renda não é simulada.</p>
     <p class="fine">Seu progresso fica só neste navegador. O jogo não coleta dados.</p>
     <button class="primary full" data-close>Bora jogar</button>
   </dialog>
@@ -160,6 +149,31 @@
     <button class="primary full" id="event-ok">Reorganizar <span aria-hidden="true">→</span></button>
   </dialog>
 
+  <dialog id="gameover-dialog" class="gameover" aria-labelledby="go-title">
+    <p class="go-title" id="go-title" tabindex="-1">Game over</p>
+    <p class="go-why" id="go-why">O tempo acabou. A semana também.</p>
+    <p class="go-score" id="go-score"></p>
+    <div id="go-ask">
+      <p class="go-tired">Tá cansado?</p>
+      <h2 class="go-question">Você é a favor da escala 6×1?</h2>
+      <div class="go-actions"><button class="go-button" id="go-yes">Sim</button><button class="go-button" id="go-no">Não</button></div>
+    </div>
+    <div id="go-answer" hidden>
+      <p class="go-reply" id="go-reply"></p>
+      <p class="go-text" id="go-text"></p>
+      <div class="go-actions go-stack"><button class="primary go-lula" id="go-lula"></button><button class="secondary" id="go-again" hidden>Mais uma semana na 6×1</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="law-dialog" class="law-dialog" aria-labelledby="law-title">
+    <p class="event-emoji" aria-hidden="true">⚖️</p>
+    <h2 id="law-title">A CLT não deixa.</h2>
+    <p id="law-text"></p>
+    <p id="law-flavio" class="law-flavio"></p>
+    <p class="fine" id="law-source"></p>
+    <button class="primary full" data-close>Entendi</button>
+  </dialog>
+
   <dialog id="finish-dialog" aria-labelledby="finish-title">
     <button class="close-button" data-close aria-label="Fechar">×</button>
     <h2 id="finish-title">Fechar a semana?</h2>
@@ -170,7 +184,7 @@
   <dialog id="restart-dialog" aria-labelledby="restart-title">
     <button class="close-button" data-close aria-label="Fechar">×</button>
     <h2 id="restart-title">Jogar de novo?</h2>
-    <p>A partida atual será apagada deste navegador e você volta para a escolha do candidato.</p>
+    <p>A partida atual será apagada deste navegador e você volta para a primeira página.</p>
     <div class="dialog-actions"><button class="secondary" data-close>Voltar</button><button class="primary" id="confirm-restart">Recomeçar</button></div>
   </dialog>
 

@@ -1,5 +1,12 @@
 # Histórico
 
+## 4.0.0 — 8/10/2026
+
+- **Todo mundo vive a 6×1 primeiro**, com 2 minutos no relógio. Fim do tempo (ou da semana): **GAME OVER**, com "Tá cansado? Você é a favor da escala 6×1?". "Não" leva à 5×2 do Lula, sem relógio; para quem escolheu Flávio, "Se arrependeu? Você ainda pode mudar seu voto". "Sim" recomeça a 6×1.
+- **Dia de trabalho editável:** hora extra até 2h (CLT art. 59), almoço mais cedo, mais tarde ou fora, com a CLT barrando trabalho acima de 6h seguidas (art. 71) e o contraponto da PEC 12/2026, apoiada por Flávio. "Ônibus" vira "transporte".
+- **Visual:** grade e lista dentro do mesmo cartão no computador; planos da lista desenhados como os blocos do calendário (tracejado = falta encaixar).
+- **Vida Além do Trabalho:** o movimento e a eleição de Rick Azevedo no "Como funciona"; a expressão na semana 5×2 e na imagem de compartilhamento.
+
 ## 3.0.0 — 8/10/2026
 
 Versão do segundo turno.

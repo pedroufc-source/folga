@@ -3,7 +3,9 @@
 //
 // Tudo se move, em qualquer dia, das 7h às 23h (o sono fica fora do calendário). A escala só diz
 // quantos dias de trabalho existem: seis na 6×1 (cinco de 8h e um de 4h) e cinco na 5×2. Cada dia
-// de trabalho é um bloco com o ônibus de ida, o trabalho, o almoço e o ônibus de volta.
+// de trabalho é um bloco com o transporte de ida, o trabalho, o almoço e o transporte de volta.
+// O jogador pode fazer hora extra (até 2h, CLT art. 59), mudar o almoço de lugar ou tirá-lo, desde
+// que nenhum trecho de trabalho passe de 6h seguidas (CLT art. 71).
 // Os planos saem de uma lista que o jogador monta (sugestões ou itens próprios).
 (function (root, factory) {
   const api = factory();
@@ -15,6 +17,7 @@
   const SHORT_DAYS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
   const FIRST_HOUR = 7, LAST_HOUR = 23, DAY_HOURS = LAST_HOUR - FIRST_HOUR;
   const SITE_URL = 'https://pedroufc-source.github.io/folga/';
+  const CLOCK_SECONDS = 120;
   const COLORS = 12;
 
   // Rodada 0: semana de quem escolhe Flávio (6×1). Rodada 1: de quem escolhe Lula (5×2).
@@ -70,23 +73,31 @@
     return { uid, ref: null, name: clean, short: clean.length > 9 ? `${clean.slice(0, 8).trimEnd()}…` : clean, emoji: '✨', hours: h, color };
   }
 
-  // Dia de trabalho: [ônibus 1h][trabalho][almoço 1h][trabalho][ônibus 1h]. O de 4h não tem almoço.
-  const workSpan = hours => (hours === 8 ? 11 : hours + 2);
-  function workSegments(hours, day, start) {
-    const parts = hours === 8
-      ? [[0, 1, 'commute'], [1, 5, 'work'], [5, 6, 'lunch'], [6, 10, 'work'], [10, 11, 'commute']]
-      : [[0, 1, 'commute'], [1, 1 + hours, 'work'], [1 + hours, 2 + hours, 'commute']];
-    return parts.map(([a, b, kind]) => ({ day, start: start + a, end: start + b, kind }));
+  // Dia de trabalho: [transporte 1h][trabalho][almoço 1h][trabalho][transporte 1h].
+  // `extra`: horas extras (0 a 2). `lunch`: tem almoço. `lunchAt`: horas de trabalho antes do almoço.
+  const MAX_EXTRA = 2, MAX_STRETCH = 6;
+  const defaultSettings = hours => ({ extra: 0, lunch: hours > MAX_STRETCH, lunchAt: hours > MAX_STRETCH ? hours / 2 : hours });
+  const workSpan = (hours, w = defaultSettings(hours)) => 2 + hours + w.extra + (w.lunch ? 1 : 0);
+  function workSegments(hours, w) {
+    const total = hours + w.extra, parts = [[0, 1, 'commute']];
+    if (w.lunch) parts.push([1, 1 + w.lunchAt, 'work'], [1 + w.lunchAt, 2 + w.lunchAt, 'lunch'], [2 + w.lunchAt, 2 + total, 'work'], [2 + total, 3 + total, 'commute']);
+    else parts.push([1, 1 + total, 'work'], [1 + total, 2 + total, 'commute']);
+    return parts.map(([a, b, kind]) => ({ day: w.day, start: w.start + a, end: w.start + b, kind }));
   }
-  const defaultWork = round => SCENARIOS[round].work.map((h, i) => ({ uid: `w${i}`, day: i, start: 8 }));
+  // Trechos de trabalho contínuo, em horas.
+  const stretches = (hours, w) => (w.lunch ? [w.lunchAt, hours + w.extra - w.lunchAt] : [hours + w.extra]);
+  const defaultWork = round => SCENARIOS[round].work.map((h, i) => ({ uid: `w${i}`, day: i, start: 8, ...defaultSettings(h) }));
   const newWeek = round => ({ work: defaultWork(round), plans: [] });
   const isWork = uid => /^w\d$/.test(uid);
   const workHoursOf = (round, uid) => SCENARIOS[round].work[Number(uid.slice(1))];
 
   const overlaps = (a, b) => a.start < b.end && b.start < a.end;
   const itemOf = (items, uid) => items.find(it => it.uid === uid);
-  function spanOf(round, items, uid) {
-    if (isWork(uid)) { const h = workHoursOf(round, uid); return h ? workSpan(h) : 0; }
+  function spanOf(round, week, items, uid) {
+    if (isWork(uid)) {
+      const h = workHoursOf(round, uid), w = week.work.find(x => x.uid === uid);
+      return h ? workSpan(h, w || defaultSettings(h)) : 0;
+    }
     const it = itemOf(items, uid);
     return it ? it.hours : 0;
   }
@@ -98,7 +109,7 @@
   const label = it => `${it.emoji} ${it.name}`;
 
   const REASONS = {
-    commute: 'Nesse horário você está no ônibus.',
+    commute: 'Nesse horário você está no transporte, indo ou voltando do trabalho.',
     work: 'Nesse horário você está no trabalho.',
     lunch: 'É o seu horário de almoço.',
   };
@@ -107,7 +118,7 @@
     const out = [];
     for (const w of week.work) {
       if (w.uid === exceptUid) continue;
-      for (const seg of workSegments(workHoursOf(round, w.uid), w.day, w.start)) out.push({ ...seg, uid: w.uid, reason: REASONS[seg.kind] });
+      for (const seg of workSegments(workHoursOf(round, w.uid), w)) out.push({ ...seg, uid: w.uid, reason: REASONS[seg.kind] });
     }
     for (const p of week.plans) {
       if (p.uid === exceptUid) continue;
@@ -119,8 +130,7 @@
   const workDays = week => week.work.map(w => w.day);
   const offDays = week => [0, 1, 2, 3, 4, 5, 6].filter(d => !workDays(week).includes(d));
 
-  function check(round, week, items, uid, day, start) {
-    const span = spanOf(round, items, uid);
+  function check(round, week, items, uid, day, start, span = spanOf(round, week, items, uid)) {
     if (!span || !Number.isInteger(day) || day < 0 || day > 6 || !Number.isInteger(start)) {
       return { ok: false, code: 'invalid', reason: 'Escolha um plano, um dia e um horário.' };
     }
@@ -135,7 +145,7 @@
     return { ok: true, placement: { uid, day, start } };
   }
   function options(round, week, items, uid, day) {
-    const span = spanOf(round, items, uid), starts = [];
+    const span = spanOf(round, week, items, uid), starts = [];
     for (let s = FIRST_HOUR; s <= LAST_HOUR - span; s++) if (check(round, week, items, uid, day, s).ok) starts.push(s);
     return starts;
   }
@@ -158,14 +168,14 @@
     return runs;
   }
   function resolveStart(round, week, items, uid, day, hour) {
-    const span = spanOf(round, items, uid);
+    const span = spanOf(round, week, items, uid);
     const covering = options(round, week, items, uid, day).filter(s => s <= hour && hour < s + span);
     if (!covering.length) return null;
     const target = hour + 0.5 - span / 2;
     return covering.reduce((best, s) => (Math.abs(s - target) < Math.abs(best - target) ? s : best));
   }
   function whyNotHere(round, week, items, uid, day, hour) {
-    const span = spanOf(round, items, uid);
+    const span = spanOf(round, week, items, uid);
     const run = freeRuns(round, week, items, uid).find(r => r.day === day && hour >= r.start && hour < r.end);
     const what = isWork(uid) ? 'O dia de trabalho' : itemOf(items, uid).short;
     if (run) {
@@ -178,7 +188,7 @@
   }
   function whyNoRoom(round, week, items, uid) {
     if (allOptions(round, week, items, uid).length) return null;
-    const span = spanOf(round, items, uid);
+    const span = spanOf(round, week, items, uid);
     const longest = Math.max(0, ...freeRuns(round, week, items, uid).map(r => r.end - r.start));
     return `Não sobra nenhum espaço de ${span}h seguidas: o maior tem ${longest}h. Mova ou tire alguma coisa.`;
   }
@@ -187,9 +197,37 @@
     const result = check(round, week, items, uid, day, start);
     if (!result.ok) return result;
     const key = isWork(uid) ? 'work' : 'plans';
+    const old = week[key].find(p => p.uid === uid) || {};
     const next = { work: week.work.slice(), plans: week.plans.slice() };
-    next[key] = [...next[key].filter(p => p.uid !== uid), { uid, day, start }];
+    next[key] = [...next[key].filter(p => p.uid !== uid), { ...old, uid, day, start }];
     return { ...result, week: next };
+  }
+
+  // Mexe no dia de trabalho: hora extra, almoço sim ou não, almoço mais cedo ou mais tarde.
+  // `code` 'clt71' e 'clt59' marcam o que a CLT não deixa.
+  const CLT71 = 'Pela CLT, quem trabalha mais de 6 horas seguidas tem direito a pelo menos 1 hora de intervalo (art. 71).';
+  const CLT59 = 'Pela CLT, a hora extra tem limite de 2 horas por dia (art. 59).';
+  function editWork(round, week, items, uid, change) {
+    const hours = workHoursOf(round, uid), cur = week.work.find(w => w.uid === uid);
+    if (!hours || !cur) return { ok: false, code: 'invalid', reason: 'Escolha um dia de trabalho.' };
+    const next = { ...cur };
+    if (change.extra) next.extra = cur.extra + change.extra;
+    if (change.lunch !== undefined) { next.lunch = change.lunch; next.lunchAt = change.lunch ? Math.min(Math.ceil((hours + next.extra) / 2), MAX_STRETCH) : hours + next.extra; }
+    if (change.lunchAt) next.lunchAt = cur.lunchAt + change.lunchAt;
+    if (!next.lunch) next.lunchAt = hours + next.extra;
+    if (next.extra < 0) return { ok: false, code: 'contract', reason: `Seu contrato é de ${hours}h nesse dia. Menos que isso, só mudando a lei.` };
+    if (next.extra > MAX_EXTRA) return { ok: false, code: 'clt59', reason: CLT59 };
+    if (next.lunch && (next.lunchAt < 1 || next.lunchAt > hours + next.extra - 1)) return { ok: false, code: 'lunch', reason: 'O almoço fica entre um trecho de trabalho e outro.' };
+    if (stretches(hours, next).some(h => h > MAX_STRETCH)) return { ok: false, code: 'clt71', reason: CLT71 };
+    const span = workSpan(hours, next), trial = { work: week.work.map(w => (w.uid === uid ? next : w)), plans: week.plans };
+    const fit = check(round, trial, items, uid, next.day, next.start, span);
+    if (!fit.ok) {
+      // Se não cabe para baixo, tenta começar mais cedo no mesmo dia.
+      const earlier = options(round, trial, items, uid, next.day).filter(s => s <= next.start).pop();
+      if (earlier === undefined) return { ok: false, code: 'fit', reason: `Não cabe nesse dia: ${fit.reason.charAt(0).toLowerCase()}${fit.reason.slice(1)}` };
+      next.start = earlier; trial.work = week.work.map(w => (w.uid === uid ? next : w));
+    }
+    return { ok: true, week: trial, work: next };
   }
   const unplace = (week, uid) => ({ work: week.work, plans: week.plans.filter(p => p.uid !== uid) });
 
@@ -197,11 +235,11 @@
   // de preferência no sábado de manhã, e o que estiver no caminho sai da semana.
   function carryOver(week, toRound, items) {
     const removed = [];
-    let work = week.work.filter(w => workHoursOf(toRound, w.uid));
+    let work = week.work.filter(w => workHoursOf(toRound, w.uid)).map(w => ({ ...w }));
     if (work.length < SCENARIOS[toRound].work.length) {
       const free = [5, 6, 0, 1, 2, 3, 4].filter(d => !work.some(w => w.day === d));
       const day = free[0];
-      for (let i = work.length; i < SCENARIOS[toRound].work.length; i++) work = [...work, { uid: `w${i}`, day, start: 8 }];
+      for (let i = work.length; i < SCENARIOS[toRound].work.length; i++) work = [...work, { uid: `w${i}`, day, start: 8, ...defaultSettings(SCENARIOS[toRound].work[i]) }];
     }
     const next = { work, plans: [] };
     for (const p of week.plans) {
@@ -212,12 +250,13 @@
   }
 
   function stats(round, week, items) {
-    const s = SCENARIOS[round], lunch = s.work.filter(h => h === 8).length;
-    const busy = s.work.reduce((n, h) => n + workSpan(h), 0);
+    const s = SCENARIOS[round], ws = week.work.map(w => ({ w, h: workHoursOf(round, w.uid) }));
+    const extra = ws.reduce((n, x) => n + x.w.extra, 0), lunch = ws.filter(x => x.w.lunch).length;
+    const busy = ws.reduce((n, x) => n + workSpan(x.h, x.w), 0);
     const free = 7 * DAY_HOURS - busy;
     const placed = week.plans.filter(p => itemOf(items, p.uid));
     const planned = placed.reduce((n, p) => n + itemOf(items, p.uid).hours, 0);
-    return { work: s.workHours, commute: s.commuteHours, lunch, sleep: 7 * 24 - 7 * DAY_HOURS, free, planned,
+    return { work: s.workHours + extra, extra, commute: s.commuteHours, lunch, sleep: 7 * 24 - 7 * DAY_HOURS, free, planned,
       count: placed.length, total: items.length, left: items.filter(it => !placed.some(p => p.uid === it.uid)).map(it => it.uid) };
   }
 
@@ -259,9 +298,14 @@
     if (week.work.length !== uids.length || !uids.every(u => week.work.some(w => w.uid === u))) return false;
     const built = { work: [], plans: [] };
     for (const w of week.work) {
-      const r = check(round, built, items, w.uid, w.day, w.start);
+      const h = workHoursOf(round, w.uid);
+      if (!Number.isInteger(w.extra) || w.extra < 0 || w.extra > MAX_EXTRA || typeof w.lunch !== 'boolean' || !Number.isInteger(w.lunchAt)) return false;
+      if (w.lunch ? (w.lunchAt < 1 || w.lunchAt > h + w.extra - 1) : w.lunchAt !== h + w.extra) return false;
+      if (stretches(h, w).some(x => x > MAX_STRETCH)) return false;
+      const entry = { uid: w.uid, day: w.day, start: w.start, extra: w.extra, lunch: w.lunch, lunchAt: w.lunchAt };
+      const r = check(round, { work: [...built.work, entry], plans: [] }, items, w.uid, w.day, w.start);
       if (!r.ok) return false;
-      built.work.push({ uid: w.uid, day: w.day, start: w.start });
+      built.work.push(entry);
     }
     for (const p of week.plans) {
       if (!itemOf(items, p.uid) || built.plans.some(q => q.uid === p.uid)) return false;
@@ -271,16 +315,19 @@
     }
     return true;
   }
+  // Todo mundo vive primeiro a 6×1 (rodada 0) e depois a 5×2 (rodada 1). `vote` guarda a escolha
+  // da primeira página; `clock`, os segundos que restam na semana 6×1.
   function validateSave(data) {
-    if (!data || data.version !== 4 || !['playing', 'between', 'results'].includes(data.mode)) return null;
-    if (![0, 1].includes(data.first) || ![0, 1].includes(data.step) || data.round !== (data.step ? 1 - data.first : data.first)) return null;
-    if ((data.mode === 'between' && data.step !== 0) || (data.mode === 'results' && data.step !== 1)) return null;
+    if (!data || data.version !== 5 || !['playing', 'gameover', 'results'].includes(data.mode)) return null;
+    if (![0, 1].includes(data.vote) || ![0, 1].includes(data.round)) return null;
+    if ((data.mode === 'gameover' && data.round !== 0) || (data.mode === 'results' && data.round !== 1)) return null;
+    if (typeof data.clock !== 'number' || !(data.clock >= 0 && data.clock <= CLOCK_SECONDS)) return null;
     if (!Array.isArray(data.items) || data.items.length > 40 || !data.items.every(validItem)) return null;
     if (new Set(data.items.map(it => it.uid)).size !== data.items.length) return null;
     if (!Array.isArray(data.weeks) || data.weeks.length !== 2 || !Number.isInteger(data.nextId)) return null;
-    if (!data.weeks[data.round] || (data.step === 1 && !data.weeks[data.first])) return null;
+    if (!data.weeks[0] || (data.round === 1 && !data.weeks[1])) return null;
     if (![0, 1].every(r => validWeek(r, data.weeks[r], data.items))) return null;
-    return JSON.parse(JSON.stringify({ version: 4, mode: data.mode, first: data.first, step: data.step, round: data.round,
+    return JSON.parse(JSON.stringify({ version: 5, mode: data.mode, vote: data.vote, round: data.round, clock: data.clock,
       items: data.items, weeks: data.weeks, nextId: data.nextId }));
   }
 
@@ -308,8 +355,9 @@
     return lines.join('\n');
   }
 
-  return { DAYS, SHORT_DAYS, FIRST_HOUR, LAST_HOUR, DAY_HOURS, SITE_URL, COLORS, SCENARIOS, GROUPS, CATALOG, STARTER,
-    catalogById, itemFromCatalog, starterItems, customItem, workSpan, workSegments, defaultWork, newWeek, isWork, workHoursOf,
+  return { DAYS, SHORT_DAYS, FIRST_HOUR, LAST_HOUR, DAY_HOURS, SITE_URL, CLOCK_SECONDS, COLORS, SCENARIOS, GROUPS, CATALOG, STARTER,
+    MAX_EXTRA, MAX_STRETCH, CLT71, CLT59, catalogById, itemFromCatalog, starterItems, customItem, defaultSettings, workSpan,
+    workSegments, stretches, editWork, defaultWork, newWeek, isWork, workHoursOf,
     overlaps, itemOf, spanOf, joinList, capitalize, label, blocks, workDays, offDays, check, options, allOptions, runStarts,
     freeRuns, resolveStart, whyNotHere, whyNoRoom, move, unplace, carryOver, stats, maxPlans, validateSave, dayStrip,
     leftOutSentence, shareText };

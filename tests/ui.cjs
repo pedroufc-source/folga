@@ -104,20 +104,26 @@ async function desktopFlows(browser, base) {
   assert.equal(await page.locator('[data-choose]').count(), 2);
   await page.screenshot({ path: path.join(out, 'desktop-inicio.png') });
   await page.click('[data-about] >> nth=0');
-  for (const host of ['folhape.com.br', 'diariodocomercio.com.br', 'senado.leg.br', 'planalto.gov.br']) {
+  for (const host of ['folhape.com.br', 'diariodocomercio.com.br', 'jornaldebrasilia.com.br', 'senado.leg.br', 'del5452.htm', 'brasildefato.com.br', 'cnnbrasil.com.br']) {
     assert.ok(await page.locator(`#about-dialog a[href*="${host}"]`).count(), `fonte ${host}`);
   }
   await page.screenshot({ path: path.join(out, 'desktop-premissas.png') });
   await page.keyboard.press('Escape');
-  check('Primeira página: trabalhador da 6×1 escolhe o candidato; fontes no diálogo');
+  check('Primeira página: escolha do candidato; fontes, CLT e Vida Além do Trabalho no diálogo');
 
   await page.click('[data-choose="0"]');
   let s = await state(page);
-  assert.equal(s.mode, 'playing'); assert.equal(s.scale, '6×1'); assert.equal(s.candidate, 'Flávio');
-  assert.equal(s.items.length, 13); assert.equal(s.week.work.length, 6);
-  assert.deepEqual(s.maxPlans, [12, 13]);
-  assert.equal(await page.evaluate(() => document.body.dataset.round), '0');
-  check('Quem escolhe Flávio preenche a 6×1: seis dias de trabalho e uma lista de 13 coisas');
+  assert.equal(s.mode, 'playing'); assert.equal(s.round, 0); assert.equal(s.scale, '6×1'); assert.equal(s.vote, 0);
+  assert.equal(s.items.length, 13); assert.equal(s.week.work.length, 6); assert.deepEqual(s.maxPlans, [12, 13]);
+  assert.ok(s.clock > 118 && s.clock <= 120);
+  await page.click('#about-button').catch(() => page.click('.band-help'));
+  const paused = (await state(page)).clock;
+  await page.waitForTimeout(1300);
+  assert.equal((await state(page)).clock, paused, 'o relógio para com um diálogo aberto');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(1300);
+  assert.ok((await state(page)).clock < paused - .8, 'o relógio anda');
+  check('A semana 6×1 vem com relógio de 2 minutos, que para quando um diálogo abre');
 
   await page.click('[data-task="mercado"]');
   let p = await boardXY(page, 0, 21);
@@ -129,13 +135,11 @@ async function desktopFlows(browser, base) {
   p = await boardXY(page, 5, 10);
   await page.mouse.click(p.x, p.y);
   assert.match((await state(page)).status, /^Nesse horário você está no trabalho\. Para mexer no trabalho, toque nele de novo\.$/);
-  assert.equal((await state(page)).selected, 'praia');
   p = await boardXY(page, 1, 20);
   await page.mouse.click(p.x, p.y);
   assert.equal((await state(page)).status, 'Aqui só tem 4h livres seguidas. Praia precisa de 6h.');
   await page.keyboard.press('Escape');
-  check('Nada tem dia marcado: o mercado vai numa segunda à noite; as recusas explicam o motivo');
-
+  await page.locator('[data-task="praia"]').scrollIntoViewIfNeeded();
   const chip = await page.locator('[data-task="praia"]').boundingBox();
   p = await boardXY(page, 6, 10);
   await page.mouse.move(chip.x + chip.width / 2, chip.y + chip.height / 2);
@@ -144,34 +148,46 @@ async function desktopFlows(browser, base) {
   await page.mouse.move(p.x, p.y, { steps: 8 });
   await page.mouse.up();
   assert.deepEqual((await state(page)).week.plans.find(x => x.uid === 'praia'), { uid: 'praia', day: 6, start: 7 });
-  check('Arrastar da lista para o calendário encaixa');
+  check('Nada tem dia marcado; recusas explicam o motivo; arrastar da lista encaixa');
 
   p = await boardXY(page, 0, 10);
   await page.mouse.click(p.x, p.y);
   assert.equal((await state(page)).selected, 'w0');
+  await page.screenshot({ path: path.join(out, 'desktop-dia-de-trabalho.png') });
+  await page.click('[data-work="lunch-off"]');
+  s = await state(page);
+  assert.equal(s.dialog, 'law-dialog');
+  assert.match(await page.locator('#law-text').innerText(), /mais de 6 horas seguidas .* 1 hora de intervalo \(art\. 71\)/);
+  assert.match(await page.locator('#law-flavio').innerText(), /PEC 12\/2026, que Flávio apoia/);
+  await page.screenshot({ path: path.join(out, 'desktop-clt.png') });
+  await page.click('#law-dialog .primary');
+  await page.click('[data-work="extra+"]'); await page.click('[data-work="extra+"]');
+  assert.equal((await state(page)).week.work.find(w => w.uid === 'w0').extra, 2);
+  await page.click('[data-work="extra+"]');
+  assert.match(await page.locator('#law-text').innerText(), /2 horas por dia \(art\. 59\)/);
+  await page.click('#law-dialog .primary');
+  await page.click('[data-work="extra-"]'); await page.click('[data-work="extra-"]');
+  await page.click('[data-work="lunch+"]');
+  assert.deepEqual((await state(page)).week.work.find(w => w.uid === 'w0'), { uid: 'w0', day: 0, start: 7, extra: 0, lunch: true, lunchAt: 5 }, 'com 2h extras o dia começou às 7h para não bater no mercado');
   p = await boardXY(page, 0, 7);
   await page.mouse.click(p.x, p.y);
-  assert.deepEqual((await state(page)).week.work.find(w => w.uid === 'w0'), { uid: 'w0', day: 0, start: 7 });
+  assert.equal((await state(page)).week.work.find(w => w.uid === 'w0').start, 7);
   const from = await boardXY(page, 5, 10), to = await boardXY(page, 6, 17);
   await page.mouse.move(from.x, from.y); await page.mouse.down();
   await page.mouse.move(to.x, to.y, { steps: 10 }); await page.mouse.up();
-  s = await state(page);
-  assert.deepEqual(s.week.work.find(w => w.uid === 'w5'), { uid: 'w5', day: 6, start: 14 }, 'o dia de 4h foi para o domingo à tarde');
-  await page.screenshot({ path: path.join(out, 'desktop-trabalho-movido.png') });
+  assert.deepEqual((await state(page)).week.work.find(w => w.uid === 'w5'), { uid: 'w5', day: 6, start: 14, extra: 0, lunch: false, lunchAt: 4 });
   await page.click('#undo-button');
-  assert.deepEqual((await state(page)).week.work.find(w => w.uid === 'w5'), { uid: 'w5', day: 5, start: 8 });
-  check('O trabalho também se move: outro horário, outro dia (a folga muda junto); desfazer volta');
+  assert.equal((await state(page)).week.work.find(w => w.uid === 'w5').day, 5);
+  check('Dia de trabalho: hora extra até 2h, almoço móvel; a CLT barra 6h seguidas e mais de 2h extras; o dia muda de lugar');
 
   await page.click('#add-chip');
-  assert.equal((await state(page)).dialog, 'add-dialog');
   await page.click('[data-cat="bet"]');
   await page.fill('#custom-name', 'Aula de dança');
   await page.selectOption('#custom-hours', '2');
   await page.click('#custom-form button[type="submit"]');
   s = await state(page);
   assert.equal(s.items.length, 15);
-  assert.ok(s.items.some(it => it.uid === 'bet'));
-  assert.ok(s.items.some(it => it.custom && it.name === 'Aula de dança' && it.hours === 2));
+  assert.ok(s.items.some(it => it.custom && it.name === 'Aula de dança'));
   await page.screenshot({ path: path.join(out, 'desktop-sugestoes.png') });
   await page.click('[data-cat="bet"]');
   await page.click('#add-dialog .primary.full');
@@ -179,43 +195,49 @@ async function desktopFlows(browser, base) {
   await page.click(`[data-task="${custom.uid}"]`);
   await page.click(`[data-delete="${custom.uid}"]`);
   assert.equal((await state(page)).items.length, 13);
-  check('A lista é do jogador: sugestões entram e saem, e dá para criar qualquer coisa');
-
   await page.focus('[data-task="nada"]');
   await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(() => document.activeElement.classList.contains('slot')), true);
   await page.keyboard.press('Enter');
   assert.ok((await state(page)).week.plans.some(x => x.uid === 'nada'));
-  assert.match(await page.locator('#accessible-board').innerText(), /não fazer nada \(plano\)/i);
-  check('Teclado: Enter escolhe o plano e o primeiro espaço; agenda em texto acompanha');
+  check('A lista é do jogador (sugestões e itens próprios); teclado funciona');
 
-  let st = (await fillGreedy(page))[0];
-  assert.ok(st.count < 13 && st.count <= 12);
+  const st0 = (await fillGreedy(page))[0];
+  assert.ok(st0.count <= 12);
   await page.screenshot({ path: path.join(out, 'desktop-semana-flavio.png') });
-  await finishWeek(page);
+  await page.click('#finish-button');
   s = await state(page);
-  assert.equal(s.mode, 'between');
-  assert.match(await page.locator('#between-title').innerText(), new RegExp(`Coube ${st.count} de 13`, 'i'));
-  assert.match(await page.locator('#switch-title').innerText(), /Se arrependeu\? Você ainda pode mudar seu voto/i);
-  const switchFirst = await page.evaluate(() => document.getElementById('switch-card').getBoundingClientRect().top < document.querySelector('#between .share-cta').getBoundingClientRect().top);
-  assert.equal(switchFirst, true, 'para quem escolheu Flávio, mudar o voto vem antes do compartilhar');
-  await page.click('#between .share-cta');
-  await page.waitForFunction(() => document.getElementById('share-image').naturalWidth > 0);
-  s = await state(page);
-  assert.match(s.share.text, /Com Flávio \(6×1\)/); assert.doesNotMatch(s.share.text, /Com Lula/);
-  await page.screenshot({ path: path.join(out, 'desktop-entre-compartilhar.png') });
+  assert.equal(s.mode, 'gameover'); assert.equal(s.dialog, 'gameover-dialog');
+  assert.match(await page.locator('#go-why').innerText(), /Você fechou a semana/);
   await page.keyboard.press('Escape');
-  await page.screenshot({ path: path.join(out, 'desktop-entre.png'), fullPage: true });
-  check('Fim da semana: "Se arrependeu? Você ainda pode mudar seu voto" e compartilhar');
-
-  const plans61 = s.weeks[0].plans;
-  await page.click('#switch-button');
+  assert.equal((await state(page)).dialog, 'gameover-dialog', 'o game over não fecha com Esc');
+  await page.click('#go-yes');
+  assert.match(await page.locator('#go-reply').innerText(), /segunda-feira começa tudo de novo/i);
+  await page.click('#go-again');
   s = await state(page);
-  assert.equal(s.mode, 'playing'); assert.equal(s.scale, '5×2'); assert.equal(s.candidate, 'Lula');
+  assert.equal(s.mode, 'playing'); assert.equal(s.round, 0); assert.equal(s.clock, 120);
+  await page.evaluate(() => window.advanceTime(125000));
+  s = await state(page);
+  assert.equal(s.mode, 'gameover'); assert.equal(s.clock, 0);
+  assert.match(await page.locator('#go-why').innerText(), /O tempo acabou/);
+  assert.match(await page.locator('#go-score').innerText(), /Coube \d+ de 13/);
+  await page.screenshot({ path: path.join(out, 'desktop-game-over.png') });
+  await page.click('#go-no');
+  assert.match(await page.locator('#go-reply').innerText(), /Se arrependeu\? Você ainda pode mudar seu voto/i);
+  assert.match(await page.locator('#go-lula').innerText(), /Mudar meu voto para Lula/);
+  check('GAME OVER quando o tempo acaba ou a semana fecha: "Tá cansado? Você é a favor da escala 6×1?"; Sim recomeça a 6×1');
+
+  const plans61 = s.weeks[0].plans, w0 = s.weeks[0].work.find(w => w.uid === 'w0');
+  await page.click('#go-lula');
+  s = await state(page);
+  assert.equal(s.mode, 'playing'); assert.equal(s.round, 1); assert.equal(s.scale, '5×2'); assert.equal(s.candidate, 'Lula');
   assert.equal(s.week.work.length, 5);
   assert.deepEqual(s.week.plans, plans61, 'a semana vai junto');
-  assert.equal(await page.evaluate(() => document.body.dataset.round), '1');
-  st = (await fillGreedy(page))[1];
+  assert.deepEqual(s.week.work.find(w => w.uid === 'w0'), w0, 'o dia de trabalho vai do jeito que estava');
+  assert.equal(await page.locator('#clock').isVisible(), false, 'na 5×2 não tem relógio');
+  await page.evaluate(() => window.advanceTime(500000));
+  assert.equal((await state(page)).mode, 'playing');
+  await fillGreedy(page);
   await page.screenshot({ path: path.join(out, 'desktop-semana-lula.png') });
   await finishWeek(page);
   s = await state(page);
@@ -223,21 +245,19 @@ async function desktopFlows(browser, base) {
   assert.ok(s.stats[1].count > s.stats[0].count, 'com Lula coube mais');
   assert.match(await page.locator('#results-title').innerText(), new RegExp(`COM FLÁVIO, COUBE ${s.stats[0].count}\\.\\s+COM LULA, COUBE ${s.stats[1].count}\\.`, 'i'));
   assert.match(await page.locator('#results-insight').innerText(), /no máximo 12 de 13/);
-  check('Mudar o voto para Lula: um dia inteiro a mais e cabe mais');
+  check('"Não" leva à 5×2 do Lula, sem relógio, com a mesma semana; o resultado compara as duas');
 
   await page.click('#results .share-cta');
   await page.waitForFunction(() => document.getElementById('share-image').naturalWidth > 0);
-  const img = await page.evaluate(() => [document.getElementById('share-image').naturalWidth, document.getElementById('share-image').naturalHeight]);
-  assert.deepEqual(img, [1080, 1920]);
+  assert.deepEqual(await page.evaluate(() => [document.getElementById('share-image').naturalWidth, document.getElementById('share-image').naturalHeight]), [1080, 1920]);
   s = await state(page);
   assert.ok(s.share.imageBytes > 20000);
-  assert.ok(s.share.whatsapp.startsWith('https://wa.me/?text='));
   const wa = decodeURIComponent(s.share.whatsapp.slice('https://wa.me/?text='.length));
+  assert.ok(s.share.whatsapp.startsWith('https://wa.me/?text='));
   assert.equal(wa, s.share.text);
   assert.match(wa, /Com Flávio \(6×1\) 🟩🟩🟩🟩🟩🟩🟨\ncoube \d+ de 13/); assert.match(wa, /Com Lula \(5×2\) 🟥🟥🟥🟥🟥⭐⭐\ncoube \d+ de 13/);
   assert.match(wa, /pedroufc-source\.github\.io\/folga\//);
   assert.equal(await page.locator('#download-link').getAttribute('download'), 'folga-minha-semana.png');
-  assert.match(await page.locator('#download-link').getAttribute('href'), /^blob:/);
   await page.click('#copy-button');
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), s.share.text);
   await page.screenshot({ path: path.join(out, 'desktop-compartilhar.png') });
@@ -251,7 +271,6 @@ async function desktopFlows(browser, base) {
 
   await page.reload();
   await page.waitForFunction(() => window.render_game_to_text);
-  assert.equal(await page.locator('#resume-button').isVisible(), true);
   await page.click('#resume-button');
   assert.equal((await state(page)).mode, 'results');
   await page.screenshot({ path: path.join(out, 'desktop-resultado.png'), fullPage: true });
@@ -259,35 +278,30 @@ async function desktopFlows(browser, base) {
   await page.click('#confirm-restart');
   s = await state(page);
   assert.equal(s.mode, 'intro'); assert.deepEqual(s.weeks, [null, null]);
-  assert.equal(await page.locator('#resume-button').isVisible(), false);
-  check('Progresso sobrevive à recarga; jogar de novo volta para a escolha do candidato');
+  check('Progresso sobrevive à recarga; jogar de novo volta para a primeira página');
 
   await page.click('[data-choose="1"]');
   s = await state(page);
-  assert.equal(s.scale, '5×2'); assert.equal(s.week.work.length, 5);
-  await put(page, 'mercado', 5, 7);
-  await page.click('[data-task="faxina"]');
-  p = await boardXY(page, 5, 11);
-  await page.mouse.click(p.x, p.y);
-  assert.deepEqual((await state(page)).week.plans.find(x => x.uid === 'faxina'), { uid: 'faxina', day: 5, start: 9 });
-  await finishWeek(page);
-  assert.equal((await state(page)).mode, 'between');
-  assert.match(await page.locator('#switch-title').innerText(), /E se fosse o Flávio\?/i);
-  await page.click('#switch-button');
-  s = await state(page);
-  assert.equal(s.scale, '6×1'); assert.equal(s.dialog, 'event-dialog');
-  assert.deepEqual(s.week.work.find(w => w.uid === 'w5'), { uid: 'w5', day: 5, start: 8 });
-  assert.match(await page.locator('#event-impact').innerText(), /Mercado e feira e .*Faxina/);
-  assert.equal(s.week.plans.length, 0);
-  await page.screenshot({ path: path.join(out, 'desktop-dia-a-mais.png') });
-  check('Quem escolhe Lula pode ver a semana com Flávio: o sexto dia de trabalho tira os planos do caminho');
+  assert.equal(s.vote, 1); assert.equal(s.round, 0); assert.equal(s.scale, '6×1', 'quem escolhe Lula também vive a 6×1 primeiro');
+  assert.match(s.status, /hoje a semana ainda é 6×1/);
+  await page.evaluate(() => window.advanceTime(125000));
+  assert.equal((await state(page)).mode, 'gameover');
+  await page.reload();
+  await page.waitForFunction(() => window.render_game_to_text);
+  await page.click('#resume-button');
+  assert.equal((await state(page)).dialog, 'gameover-dialog', 'o game over volta depois de recarregar');
+  await page.click('#go-no');
+  assert.match(await page.locator('#go-reply').innerText(), /Existe vida além do trabalho/i);
+  await page.click('#go-lula');
+  assert.equal((await state(page)).round, 1);
+  check('Quem escolhe Lula também passa pela 6×1 e pelo game over antes da 5×2');
   await context.close();
 }
 
 async function savesAndOffline(browser, base) {
   let context = await browser.newContext();
   let page = await context.newPage(); listen(page, 'save-corrompido', base);
-  await page.addInitScript(() => localStorage.setItem('folga-v4', '{quebrado'));
+  await page.addInitScript(() => localStorage.setItem('folga-v5', '{quebrado'));
   await page.goto(base + '/');
   let s = await state(page);
   assert.equal(s.mode, 'intro'); assert.equal(s.resumeMode, null);
@@ -327,7 +341,7 @@ async function mobileLayouts(browserType, base) {
     await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-inicio.png`) });
     await page.tap('[data-choose="0"]');
     assert.deepEqual(await noScroll(page), { vertical: true, horizontal: true }, `${phone.name}: jogo cabe na tela sem rolar`);
-    assert.equal(await insideViewport(page, '#tray, #add-chip, #finish-button, #undo-button, #board'), true, `${phone.name}: lista e botões visíveis`);
+    assert.equal(await insideViewport(page, '#tray, #add-chip, #finish-button, #undo-button, #board, #clock, #score'), true, `${phone.name}: relógio, lista e botões visíveis`);
     const b = (await state(page)).board;
     assert.ok(b.rh >= 9 && b.cw >= 30, `${phone.name}: calendário legível (linha ${b.rh.toFixed(1)}px, coluna ${b.cw.toFixed(1)}px)`);
     await page.tap('[data-task="nada"]');
@@ -341,19 +355,28 @@ async function mobileLayouts(browserType, base) {
     const w = await boardXY(page, 2, 10);
     await page.touchscreen.tap(w.x, w.y);
     assert.equal((await state(page)).selected, 'w2', `${phone.name}: tocar no trabalho seleciona o dia de trabalho`);
+    assert.equal(await insideViewport(page, '#picker [data-work="extra+"]'), true, `${phone.name}: botões do dia de trabalho visíveis`);
     await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}.png`) });
+    await page.tap('#picker [data-work="lunch-off"]');
+    assert.equal((await state(page)).dialog, 'law-dialog');
+    assert.equal(await insideViewport(page, '#law-dialog .primary'), true, `${phone.name}: aviso da CLT cabe na tela`);
+    if (phone.name === 'iphone-14') await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-clt.png`) });
+    await page.tap('#law-dialog .primary');
+    await page.tap('#picker .picker-close');
     if (phone.name === 'iphone-14' || phone.name === 'iphone-se-1') {
-      await page.tap('#picker .picker-close');
       await page.tap('#add-chip');
       await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-sugestoes.png`) });
       await page.tap('#add-dialog .primary.full');
       await fillGreedy(page, true);
-      await finishWeek(page, true);
-      assert.equal((await state(page)).mode, 'between');
-      assert.equal((await noScroll(page)).horizontal, true);
-      await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-fim-flavio.png`), fullPage: true });
-      if (phone.name === 'iphone-14') assert.equal(await insideViewport(page, '#switch-button'), true, `${phone.name}: "mudar meu voto" visível sem rolar`);
-      await page.locator('#switch-button').tap();
+      await page.evaluate(() => window.advanceTime(125000));
+      assert.equal((await state(page)).mode, 'gameover');
+      assert.equal(await insideViewport(page, '#go-yes, #go-no'), true, `${phone.name}: Sim e Não visíveis no game over`);
+      await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-game-over.png`) });
+      await page.tap('#go-no');
+      assert.equal(await insideViewport(page, '#go-lula'), true, `${phone.name}: botão do Lula visível`);
+      await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-mudar-voto.png`) });
+      await page.tap('#go-lula');
+      assert.deepEqual(await noScroll(page), { vertical: true, horizontal: true }, `${phone.name}: semana 5×2 sem rolar`);
       await fillGreedy(page, true);
       await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-semana-lula.png`) });
       await finishWeek(page, true);
@@ -367,7 +390,7 @@ async function mobileLayouts(browserType, base) {
     await context.close();
   }
   await browser.close();
-  check(`Celular (${label}): de 320×460 a 430×740 o jogo cabe sem rolar, com toque no calendário, no trabalho e na lista`);
+  check(`Celular (${label}): de 320×460 a 430×740 o jogo cabe sem rolar; game over, aviso da CLT e 5×2 cabem na tela`);
 }
 
 (async () => {

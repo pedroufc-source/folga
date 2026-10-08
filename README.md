@@ -4,16 +4,18 @@
 
 Você trabalha na escala 6×1 e vai votar no segundo turno, em 25 de outubro. **Qual é o seu candidato?**
 
-- Escolheu **Flávio**: monte a semana **6×1**, com seis dias de trabalho e 44h.
-- Escolheu **Lula**: monte a semana **5×2**, com cinco dias de trabalho e 40h.
+1. **Todo mundo vive primeiro a semana 6×1**, a do Flávio: seis dias de trabalho, 44h e **2 minutos no relógio** para encaixar a vida.
+2. O tempo acaba, a semana acaba: **GAME OVER**. "Tá cansado? Você é a favor da escala 6×1?"
+3. **Não:** "Se arrependeu? Você ainda pode mudar seu voto." A mesma vida na **5×2 do Lula**, com cinco dias de trabalho, sem relógio e com os planos no lugar. **Sim:** segunda-feira começa tudo de novo.
+4. O resultado compara as duas semanas e vira imagem para os Stories e o WhatsApp.
 
-**Tudo se move:** trabalho, almoço, faxina, karaokê, motel, salão, culto, bet. Você decide o dia e a hora. A lista começa com 13 sugestões; dá para tirar, pôr mais do catálogo ou criar o que quiser. No fim aparece **"Se arrependeu? Você ainda pode mudar seu voto"**: a mesma vida na semana do outro candidato. O resultado vira imagem para os Stories e para o WhatsApp.
+**Tudo se move:** trabalho, almoço, faxina, karaokê, motel, salão, culto, bet. No dia de trabalho dá para fazer hora extra e mudar o almoço, mas a CLT barra trabalho acima de 6h seguidas sem intervalo, e o jogo mostra o que diz a proposta que o Flávio apoia. A lista começa com 13 sugestões; dá para tirar, pôr mais do catálogo ou criar o que quiser.
 
-Com a lista inicial, mesmo mexendo no horário do trabalho, na 6×1 cabem no máximo 12 das 13 coisas. Na 5×2, cabem todas.
+Com a lista inicial, mesmo mexendo no horário do trabalho e sem relógio, na 6×1 cabem no máximo 12 das 13 coisas. Na 5×2, cabem todas.
 
 ## Como jogar
 
-- **Celular:** toque num plano da lista e depois num espaço verde do calendário. Para mexer no trabalho, toque nele. A lista rola para o lado.
+- **Celular:** toque num plano da lista e depois num espaço verde do calendário. Para mexer no trabalho (horário, dia, hora extra, almoço), toque nele. A lista rola para o lado.
 - **Computador:** clique como no celular ou arraste.
 - "＋ Mais coisas" abre as sugestões e o campo para criar um item. "Desfazer" volta a última jogada.
 
@@ -36,12 +38,12 @@ O link tem imagem de preview (`og.png`), que aparece quando é colado no WhatsAp
 | --- | ---: | ---: |
 | Trabalho | 44 | 40 |
 | Dias de trabalho | 6 | 5 |
-| Ônibus (2h por dia de trabalho) | 12 | 10 |
+| Transporte (2h por dia de trabalho) | 12 | 10 |
 | Almoço nos dias de 8h | 5 | 5 |
 | Sono (23h–7h) | 56 | 56 |
 | **Livre para você** | **51** | **57** |
 
-O limite de 44h está na Constituição (art. 7º, XIII). A PEC do fim da escala 6×1 propõe 40h com dois dias de descanso. O que Lula e Flávio disseram sobre ela está no diálogo "Como funciona", com as fontes. O resto (horários e duração dos planos) é modelo do jogo. Detalhes em [REFERENCIAS.md](REFERENCIAS.md).
+O limite de 44h está na Constituição (art. 7º, XIII); hora extra e intervalo, na CLT (arts. 59 e 71). A PEC do fim da escala 6×1 propõe 40h com dois dias de descanso. O que Lula e Flávio disseram, a PEC 12/2026 e o movimento Vida Além do Trabalho estão no diálogo "Como funciona", com as fontes. O resto (horários e duração dos planos) é modelo do jogo. Detalhes em [REFERENCIAS.md](REFERENCIAS.md).
 
 ## Rodar e testar
 
