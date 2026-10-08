@@ -771,11 +771,8 @@
   }
 
   // ---------- Compartilhar ----------
-  function shareURL() {
-    const host = location.hostname;
-    const local = !host || host === 'localhost' || /^(127\.|10\.|192\.168\.)/.test(host) || host.endsWith('.local');
-    return /^https?:$/.test(location.protocol) && !local ? location.origin + location.pathname.replace(/index\.html$/, '') : E.SITE_URL;
-  }
+  // O link compartilhado é sempre o do site oficial, mesmo jogando no endereço de teste ou no próprio computador.
+  const shareURL = () => E.SITE_URL;
   function wrapItems(g, list, sep, maxWidth) {
     const lines = [];
     let line = '';

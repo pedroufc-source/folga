@@ -8,6 +8,7 @@ Navegação de agenda no celular, inspirada no Google Agenda.
 - **Horário primeiro:** tocar num horário livre mostra só o que cabe ali, primeiro o básico. O jeito antigo (escolher na lista e depois o lugar) continua valendo.
 - Na visão do dia, arrastar um bloco para cima ou para baixo muda o horário; para o lado, troca o dia.
 - O toque na agenda não dispara mais o clique "fantasma" que podia cair num botão.
+- O link compartilhado é sempre o do site oficial, mesmo jogando no endereço de teste.
 - `npm run deploy:teste` publica uma versão de teste na Cloudflare Pages, sem mexer no site principal.
 
 ## 5.0.0 — 8/10/2026
