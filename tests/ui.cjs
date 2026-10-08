@@ -64,16 +64,27 @@ async function boardXY(page, day, hour) {
   const b = (await state(page)).board;
   return { x: b.left + b.gx + (day + .5) * b.cw, y: b.top + b.gy + (hour - b.firstHour + .5) * b.rh };
 }
-async function dismissEvent(page, tap) {
-  if ((await state(page)).dialog === 'event-dialog') await (tap ? page.tap('#event-ok') : page.click('#event-ok'));
+const act = (page, tap) => sel => (tap ? page.locator(sel).first().tap() : page.locator(sel).first().click());
+async function put(page, uid, day, start, tap = false) {
+  await act(page, tap)(`[data-task="${uid}"]`);
+  await act(page, tap)(`.slot[data-day="${day}"][data-start="${start}"]`);
+  const placed = (await state(page)).week.plans.find(p => p.uid === uid);
+  assert.deepEqual([placed.day, placed.start], [day, start], `${uid} encaixado em ${day}/${start}`);
 }
-async function put(page, id, day, start, tap = false) {
-  const act = sel => (tap ? page.tap(sel) : page.click(sel));
-  await act(`[data-task="${id}"]`);
-  await act(`.slot[data-day="${day}"][data-start="${start}"]`);
-  await dismissEvent(page, tap);
-  const placed = (await state(page)).plans.find(p => p.id === id).scheduled;
-  assert.deepEqual([placed.day, placed.start], [day, start], `${id} encaixado em ${day}/${start}`);
+// Encaixa cada item da lista no primeiro espaço sugerido, se houver.
+async function fillGreedy(page, tap = false) {
+  for (const it of (await state(page)).items) {
+    const s = await state(page);
+    if (s.week.plans.some(p => p.uid === it.uid)) continue;
+    await act(page, tap)(`[data-task="${it.uid}"]`);
+    if (await page.locator('#picker .slot').count()) await act(page, tap)('#picker .slot');
+    else await act(page, tap)('#picker .picker-close');
+  }
+  return (await state(page)).stats;
+}
+async function finishWeek(page, tap = false) {
+  await act(page, tap)('#finish-button');
+  if ((await state(page)).dialog === 'finish-dialog') await act(page, tap)('#confirm-finish');
 }
 const noScroll = page => page.evaluate(() => ({
   vertical: document.documentElement.scrollHeight <= innerHeight + 1,
@@ -90,124 +101,131 @@ async function desktopFlows(browser, base) {
   await page.goto(base + '/');
   await page.waitForFunction(() => window.render_game_to_text);
   assert.equal((await state(page)).mode, 'intro');
+  assert.equal(await page.locator('[data-choose]').count(), 2);
   await page.screenshot({ path: path.join(out, 'desktop-inicio.png') });
-  await page.click('#about-button');
-  assert.equal((await state(page)).dialog, 'about-dialog');
-  assert.ok(await page.locator('#about-dialog a[href*="senado.leg.br"]').count(), 'fonte do Senado');
+  await page.click('[data-about] >> nth=0');
+  for (const host of ['folhape.com.br', 'diariodocomercio.com.br', 'senado.leg.br', 'planalto.gov.br']) {
+    assert.ok(await page.locator(`#about-dialog a[href*="${host}"]`).count(), `fonte ${host}`);
+  }
   await page.screenshot({ path: path.join(out, 'desktop-premissas.png') });
   await page.keyboard.press('Escape');
-  await page.click('#start-button');
+  check('Primeira página: trabalhador da 6×1 escolhe o candidato; fontes no diálogo');
+
+  await page.click('[data-choose="0"]');
   let s = await state(page);
-  assert.equal(s.mode, 'playing'); assert.equal(s.scale, '6×1');
+  assert.equal(s.mode, 'playing'); assert.equal(s.scale, '6×1'); assert.equal(s.candidate, 'Flávio');
+  assert.equal(s.items.length, 13); assert.equal(s.week.work.length, 6);
+  assert.deepEqual(s.maxPlans, [12, 13]);
   assert.equal(await page.evaluate(() => document.body.dataset.round), '0');
-  check('Início abre a semana 6×1, com premissas e fontes num diálogo');
+  check('Quem escolhe Flávio preenche a 6×1: seis dias de trabalho e uma lista de 13 coisas');
 
-  await page.click('[data-task="feira"]');
-  s = await state(page);
-  assert.equal(s.selected, 'feira'); assert.equal(s.options.length, 0); assert.equal(s.statusTone, 'error');
-  assert.match(s.status, /Na 6×1 não cabe: sábado, entre 8h e 12h/);
-  assert.equal(await page.locator('#picker .slot').count(), 0);
-  await page.keyboard.press('Escape');
-  assert.equal((await state(page)).selected, null);
-  check('Feira na 6×1 explica que sábado de manhã é trabalho');
-
-  await put(page, 'sol', 6, 10);
-  await page.click('[data-task="familia"]');
-  assert.match((await state(page)).status, /Praia ou parque/);
-  await page.keyboard.press('Escape');
-  check('Plano que disputa o domingo aponta quem ocupa o espaço');
-
-  await page.click('[data-task="curso"]');
-  let p = await boardXY(page, 1, 21);
+  await page.click('[data-task="mercado"]');
+  let p = await boardXY(page, 0, 21);
   await page.mouse.move(p.x, p.y);
+  await page.screenshot({ path: path.join(out, 'desktop-previa.png') });
   await page.mouse.click(p.x, p.y);
-  s = await state(page);
-  assert.deepEqual(s.plans.find(x => x.id === 'curso').scheduled, { id: 'curso', day: 1, start: 20, end: 23 });
-  check('Clique na área verde do calendário encaixa o plano cobrindo a hora clicada');
+  assert.deepEqual((await state(page)).week.plans.find(x => x.uid === 'mercado'), { uid: 'mercado', day: 0, start: 20 });
+  await page.click('[data-task="praia"]');
+  p = await boardXY(page, 5, 10);
+  await page.mouse.click(p.x, p.y);
+  assert.match((await state(page)).status, /^Nesse horário você está no trabalho\. Para mexer no trabalho, toque nele de novo\.$/);
+  assert.equal((await state(page)).selected, 'praia');
+  p = await boardXY(page, 1, 20);
+  await page.mouse.click(p.x, p.y);
+  assert.equal((await state(page)).status, 'Aqui só tem 4h livres seguidas. Praia precisa de 6h.');
+  await page.keyboard.press('Escape');
+  check('Nada tem dia marcado: o mercado vai numa segunda à noite; as recusas explicam o motivo');
 
-  const chip = await page.locator('[data-task="amigos"]').boundingBox();
-  p = await boardXY(page, 4, 21);
+  const chip = await page.locator('[data-task="praia"]').boundingBox();
+  p = await boardXY(page, 6, 10);
   await page.mouse.move(chip.x + chip.width / 2, chip.y + chip.height / 2);
   await page.mouse.down();
   await page.mouse.move(chip.x - 40, chip.y + 10, { steps: 4 });
   await page.mouse.move(p.x, p.y, { steps: 8 });
-  s = await state(page);
-  assert.equal(s.selected, null);
   await page.mouse.up();
-  s = await state(page);
-  assert.deepEqual(s.plans.find(x => x.id === 'amigos').scheduled, { id: 'amigos', day: 4, start: 20, end: 23 });
-  assert.equal(s.dialog, 'event-dialog', 'o imprevisto aparece no terceiro plano');
-  assert.equal(s.eventActive, true);
-  await page.screenshot({ path: path.join(out, 'desktop-imprevisto.png') });
-  await page.click('#event-ok');
-  check('Arrastar da lista para o calendário encaixa; o imprevisto aparece no terceiro plano');
+  assert.deepEqual((await state(page)).week.plans.find(x => x.uid === 'praia'), { uid: 'praia', day: 6, start: 7 });
+  check('Arrastar da lista para o calendário encaixa');
 
-  p = await boardXY(page, 2, 12);
+  p = await boardXY(page, 0, 10);
   await page.mouse.click(p.x, p.y);
-  assert.match((await state(page)).status, /almoço/);
-  await page.click('[data-task="corpo"]');
-  p = await boardXY(page, 0, 21);
-  await page.mouse.move(p.x, p.y);
-  await page.screenshot({ path: path.join(out, 'desktop-previa.png') });
+  assert.equal((await state(page)).selected, 'w0');
+  p = await boardXY(page, 0, 7);
   await page.mouse.click(p.x, p.y);
-  assert.deepEqual((await state(page)).plans.find(x => x.id === 'corpo').scheduled, { id: 'corpo', day: 0, start: 20, end: 22 });
-  await put(page, 'nada', 3, 20);
-  const from = await boardXY(page, 3, 21), to = await boardXY(page, 6, 20);
+  assert.deepEqual((await state(page)).week.work.find(w => w.uid === 'w0'), { uid: 'w0', day: 0, start: 7 });
+  const from = await boardXY(page, 5, 10), to = await boardXY(page, 6, 17);
   await page.mouse.move(from.x, from.y); await page.mouse.down();
   await page.mouse.move(to.x, to.y, { steps: 10 }); await page.mouse.up();
   s = await state(page);
-  assert.deepEqual(s.plans.find(x => x.id === 'nada').scheduled, { id: 'nada', day: 6, start: 19, end: 21 });
-  check('Tocar em bloco fixo explica o horário; arrastar um plano encaixado o move');
+  assert.deepEqual(s.week.work.find(w => w.uid === 'w5'), { uid: 'w5', day: 6, start: 14 }, 'o dia de 4h foi para o domingo à tarde');
+  await page.screenshot({ path: path.join(out, 'desktop-trabalho-movido.png') });
   await page.click('#undo-button');
-  assert.deepEqual((await state(page)).plans.find(x => x.id === 'nada').scheduled, { id: 'nada', day: 3, start: 20, end: 22 });
-  const solXY = await boardXY(page, 6, 12);
-  await page.mouse.click(solXY.x, solXY.y);
-  assert.equal((await state(page)).selected, 'sol');
-  await page.click('[data-remove="sol"]');
-  assert.equal((await state(page)).plans.find(x => x.id === 'sol').scheduled, null);
-  await page.click('#undo-button');
-  assert.ok((await state(page)).plans.find(x => x.id === 'sol').scheduled);
-  check('Desfazer volta a jogada; tocar num plano encaixado permite tirar');
+  assert.deepEqual((await state(page)).week.work.find(w => w.uid === 'w5'), { uid: 'w5', day: 5, start: 8 });
+  check('O trabalho também se move: outro horário, outro dia (a folga muda junto); desfazer volta');
 
-  await page.focus('[data-task="projeto"]');
+  await page.click('#add-chip');
+  assert.equal((await state(page)).dialog, 'add-dialog');
+  await page.click('[data-cat="bet"]');
+  await page.fill('#custom-name', 'Aula de dança');
+  await page.selectOption('#custom-hours', '2');
+  await page.click('#custom-form button[type="submit"]');
+  s = await state(page);
+  assert.equal(s.items.length, 15);
+  assert.ok(s.items.some(it => it.uid === 'bet'));
+  assert.ok(s.items.some(it => it.custom && it.name === 'Aula de dança' && it.hours === 2));
+  await page.screenshot({ path: path.join(out, 'desktop-sugestoes.png') });
+  await page.click('[data-cat="bet"]');
+  await page.click('#add-dialog .primary.full');
+  const custom = (await state(page)).items.find(it => it.custom);
+  await page.click(`[data-task="${custom.uid}"]`);
+  await page.click(`[data-delete="${custom.uid}"]`);
+  assert.equal((await state(page)).items.length, 13);
+  check('A lista é do jogador: sugestões entram e saem, e dá para criar qualquer coisa');
+
+  await page.focus('[data-task="nada"]');
   await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(() => document.activeElement.classList.contains('slot')), true);
   await page.keyboard.press('Enter');
-  s = await state(page);
-  assert.ok(s.plans.find(x => x.id === 'projeto').scheduled);
-  assert.equal(await page.evaluate(() => document.activeElement.dataset.task), 'feira');
-  assert.match(await page.locator('#accessible-board').innerText(), /tempo pro hobby \(plano\)/i);
-  check('Teclado: Enter escolhe o plano, o horário e devolve o foco à lista; agenda em texto acompanha');
-  await page.screenshot({ path: path.join(out, 'desktop-semana-1.png') });
+  assert.ok((await state(page)).week.plans.some(x => x.uid === 'nada'));
+  assert.match(await page.locator('#accessible-board').innerText(), /não fazer nada \(plano\)/i);
+  check('Teclado: Enter escolhe o plano e o primeiro espaço; agenda em texto acompanha');
 
-  const week1 = (await state(page)).weeks[0];
-  await page.click('#finish-button');
-  assert.equal((await state(page)).dialog, 'finish-dialog');
-  await page.click('#confirm-finish');
+  let st = (await fillGreedy(page))[0];
+  assert.ok(st.count < 13 && st.count <= 12);
+  await page.screenshot({ path: path.join(out, 'desktop-semana-flavio.png') });
+  await finishWeek(page);
   s = await state(page);
-  assert.equal(s.mode, 'intermission');
-  assert.match(await page.locator('#mid-title').innerText(), new RegExp(`Coube ${week1.length} de 8`, 'i'));
-  await page.screenshot({ path: path.join(out, 'desktop-intervalo.png'), fullPage: true });
-  await page.click('#next-button');
+  assert.equal(s.mode, 'between');
+  assert.match(await page.locator('#between-title').innerText(), new RegExp(`Coube ${st.count} de 13`, 'i'));
+  assert.match(await page.locator('#switch-title').innerText(), /Se arrependeu\? Você ainda pode mudar seu voto/i);
+  const switchFirst = await page.evaluate(() => document.getElementById('switch-card').getBoundingClientRect().top < document.querySelector('#between .share-cta').getBoundingClientRect().top);
+  assert.equal(switchFirst, true, 'para quem escolheu Flávio, mudar o voto vem antes do compartilhar');
+  await page.click('#between .share-cta');
+  await page.waitForFunction(() => document.getElementById('share-image').naturalWidth > 0);
   s = await state(page);
-  assert.equal(s.scale, '5×2'); assert.equal(s.round, 2); assert.equal(s.events[1], true);
-  assert.deepEqual(s.weeks[1], week1, 'a 5×2 começa com os encaixes da 6×1');
+  assert.match(s.share.text, /Com Flávio \(6×1\)/); assert.doesNotMatch(s.share.text, /Com Lula/);
+  await page.screenshot({ path: path.join(out, 'desktop-entre-compartilhar.png') });
+  await page.keyboard.press('Escape');
+  await page.screenshot({ path: path.join(out, 'desktop-entre.png'), fullPage: true });
+  check('Fim da semana: "Se arrependeu? Você ainda pode mudar seu voto" e compartilhar');
+
+  const plans61 = s.weeks[0].plans;
+  await page.click('#switch-button');
+  s = await state(page);
+  assert.equal(s.mode, 'playing'); assert.equal(s.scale, '5×2'); assert.equal(s.candidate, 'Lula');
+  assert.equal(s.week.work.length, 5);
+  assert.deepEqual(s.week.plans, plans61, 'a semana vai junto');
   assert.equal(await page.evaluate(() => document.body.dataset.round), '1');
-  check('Fechar a 6×1 mostra o que ficou de fora; a 5×2 começa com os mesmos encaixes');
-
-  await put(page, 'feira', 5, 8);
-  await put(page, 'sol', 5, 10);
-  await put(page, 'familia', 6, 12);
-  assert.equal((await state(page)).weeks[1].length, 8);
-  await page.screenshot({ path: path.join(out, 'desktop-semana-2.png') });
-  await page.click('#finish-button');
+  st = (await fillGreedy(page))[1];
+  await page.screenshot({ path: path.join(out, 'desktop-semana-lula.png') });
+  await finishWeek(page);
   s = await state(page);
   assert.equal(s.mode, 'results');
-  assert.match(await page.locator('#results-title').innerText(), /NA 6×1, COUBE \d\.\s+NA 5×2, COUBE 8\./i);
-  assert.match(await page.locator('#results-insight').innerText(), /máximo/);
-  check('Com os oito planos, a 5×2 fecha sem confirmação e o resultado compara as semanas');
+  assert.ok(s.stats[1].count > s.stats[0].count, 'com Lula coube mais');
+  assert.match(await page.locator('#results-title').innerText(), new RegExp(`COM FLÁVIO, COUBE ${s.stats[0].count}\\.\\s+COM LULA, COUBE ${s.stats[1].count}\\.`, 'i'));
+  assert.match(await page.locator('#results-insight').innerText(), /no máximo 12 de 13/);
+  check('Mudar o voto para Lula: um dia inteiro a mais e cabe mais');
 
-  await page.click('#share-button');
+  await page.click('#results .share-cta');
   await page.waitForFunction(() => document.getElementById('share-image').naturalWidth > 0);
   const img = await page.evaluate(() => [document.getElementById('share-image').naturalWidth, document.getElementById('share-image').naturalHeight]);
   assert.deepEqual(img, [1080, 1920]);
@@ -216,8 +234,8 @@ async function desktopFlows(browser, base) {
   assert.ok(s.share.whatsapp.startsWith('https://wa.me/?text='));
   const wa = decodeURIComponent(s.share.whatsapp.slice('https://wa.me/?text='.length));
   assert.equal(wa, s.share.text);
-  assert.match(wa, /6×1 🟩🟩🟩🟩🟩🟩🟨/); assert.match(wa, /5×2 🟥🟥🟥🟥🟥⭐⭐\ncoube 8 de 8/);
-  assert.match(wa, /pedroufc-source\.github\.io\/folga\//, 'servidor local compartilha o endereço público');
+  assert.match(wa, /Com Flávio \(6×1\) 🟩🟩🟩🟩🟩🟩🟨\ncoube \d+ de 13/); assert.match(wa, /Com Lula \(5×2\) 🟥🟥🟥🟥🟥⭐⭐\ncoube \d+ de 13/);
+  assert.match(wa, /pedroufc-source\.github\.io\/folga\//);
   assert.equal(await page.locator('#download-link').getAttribute('download'), 'folga-minha-semana.png');
   assert.match(await page.locator('#download-link').getAttribute('href'), /^blob:/);
   await page.click('#copy-button');
@@ -229,27 +247,47 @@ async function desktopFlows(browser, base) {
   });
   fs.writeFileSync(path.join(out, 'imagem-stories.png'), Buffer.from(story, 'base64'));
   await page.keyboard.press('Escape');
-  check('Compartilhar: imagem 1080×1920, link do WhatsApp com o texto, cópia e download');
+  check('Compartilhar: imagem 1080×1920 com as duas semanas, WhatsApp com o texto, cópia e download');
 
   await page.reload();
   await page.waitForFunction(() => window.render_game_to_text);
-  assert.match(await page.locator('#start-button').innerText(), /Continuar/);
-  await page.click('#start-button');
+  assert.equal(await page.locator('#resume-button').isVisible(), true);
+  await page.click('#resume-button');
   assert.equal((await state(page)).mode, 'results');
   await page.screenshot({ path: path.join(out, 'desktop-resultado.png'), fullPage: true });
-  await page.click('#home-button');
-  await page.click('#fresh-button');
+  await page.click('#replay-button');
   await page.click('#confirm-restart');
   s = await state(page);
-  assert.equal(s.mode, 'playing'); assert.equal(s.round, 1); assert.deepEqual(s.weeks, [[], []]);
-  check('Progresso sobrevive à recarga; recomeçar zera as duas semanas');
+  assert.equal(s.mode, 'intro'); assert.deepEqual(s.weeks, [null, null]);
+  assert.equal(await page.locator('#resume-button').isVisible(), false);
+  check('Progresso sobrevive à recarga; jogar de novo volta para a escolha do candidato');
+
+  await page.click('[data-choose="1"]');
+  s = await state(page);
+  assert.equal(s.scale, '5×2'); assert.equal(s.week.work.length, 5);
+  await put(page, 'mercado', 5, 7);
+  await page.click('[data-task="faxina"]');
+  p = await boardXY(page, 5, 11);
+  await page.mouse.click(p.x, p.y);
+  assert.deepEqual((await state(page)).week.plans.find(x => x.uid === 'faxina'), { uid: 'faxina', day: 5, start: 9 });
+  await finishWeek(page);
+  assert.equal((await state(page)).mode, 'between');
+  assert.match(await page.locator('#switch-title').innerText(), /E se fosse o Flávio\?/i);
+  await page.click('#switch-button');
+  s = await state(page);
+  assert.equal(s.scale, '6×1'); assert.equal(s.dialog, 'event-dialog');
+  assert.deepEqual(s.week.work.find(w => w.uid === 'w5'), { uid: 'w5', day: 5, start: 8 });
+  assert.match(await page.locator('#event-impact').innerText(), /Mercado e feira e .*Faxina/);
+  assert.equal(s.week.plans.length, 0);
+  await page.screenshot({ path: path.join(out, 'desktop-dia-a-mais.png') });
+  check('Quem escolhe Lula pode ver a semana com Flávio: o sexto dia de trabalho tira os planos do caminho');
   await context.close();
 }
 
 async function savesAndOffline(browser, base) {
   let context = await browser.newContext();
   let page = await context.newPage(); listen(page, 'save-corrompido', base);
-  await page.addInitScript(() => localStorage.setItem('folga-game-v2', '{quebrado'));
+  await page.addInitScript(() => localStorage.setItem('folga-v4', '{quebrado'));
   await page.goto(base + '/');
   let s = await state(page);
   assert.equal(s.mode, 'intro'); assert.equal(s.resumeMode, null);
@@ -259,18 +297,18 @@ async function savesAndOffline(browser, base) {
   page = await context.newPage(); listen(page, 'sem-armazenamento', base);
   await page.addInitScript(() => Object.defineProperty(window, 'localStorage', { get() { throw new Error('bloqueado'); } }));
   await page.goto(base + '/');
-  await page.click('#start-button');
-  await put(page, 'sol', 6, 10);
+  await page.click('[data-choose="0"]');
+  await put(page, 'praia', 6, 7);
   s = await state(page);
-  assert.equal(s.storageAvailable, false); assert.equal(s.weeks[0].length, 1);
+  assert.equal(s.storageAvailable, false); assert.equal(s.week.plans.length, 1);
   await context.close();
   check('Save corrompido começa do zero; sem localStorage o jogo segue');
 
   context = await browser.newContext({ offline: true, viewport: { width: 390, height: 664 } });
   page = await context.newPage(); listen(page, 'arquivo-local');
   await page.goto('file://' + path.join(root, 'index.html'));
-  await page.click('#start-button');
-  await put(page, 'curso', 3, 20);
+  await page.click('[data-choose="1"]');
+  await put(page, 'estudo', 3, 19);
   assert.equal(await page.evaluate(() => document.fonts.check('30px Anton')), true, 'fonte local carregada');
   await context.close();
   check('Abre por file:// e offline, com a fonte do próprio site e nenhuma requisição externa');
@@ -285,49 +323,51 @@ async function mobileLayouts(browserType, base) {
     await page.goto(base + '/');
     await page.waitForFunction(() => window.render_game_to_text);
     assert.equal((await noScroll(page)).horizontal, true, `${phone.name}: início sem rolagem lateral`);
-    if (phone.name === 'iphone-14') await page.screenshot({ path: path.join(out, `celular-${label}-inicio.png`) });
-    await page.tap('#start-button');
-    const layout = await noScroll(page);
-    assert.deepEqual(layout, { vertical: true, horizontal: true }, `${phone.name}: jogo cabe na tela sem rolar`);
-    assert.equal(await insideViewport(page, '.chip, #finish-button, #undo-button, #board'), true, `${phone.name}: lista e botões visíveis`);
+    assert.equal(await insideViewport(page, '[data-choose]'), true, `${phone.name}: os dois candidatos aparecem sem rolar`);
+    await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-inicio.png`) });
+    await page.tap('[data-choose="0"]');
+    assert.deepEqual(await noScroll(page), { vertical: true, horizontal: true }, `${phone.name}: jogo cabe na tela sem rolar`);
+    assert.equal(await insideViewport(page, '#tray, #add-chip, #finish-button, #undo-button, #board'), true, `${phone.name}: lista e botões visíveis`);
     const b = (await state(page)).board;
     assert.ok(b.rh >= 9 && b.cw >= 30, `${phone.name}: calendário legível (linha ${b.rh.toFixed(1)}px, coluna ${b.cw.toFixed(1)}px)`);
     await page.tap('[data-task="nada"]');
     assert.deepEqual(await noScroll(page), { vertical: true, horizontal: true }, `${phone.name}: seletor aberto sem rolar`);
     assert.equal(await insideViewport(page, '#picker, #finish-button'), true, `${phone.name}: seletor visível`);
     await page.tap('#picker .slot >> nth=0');
-    await page.tap('[data-task="sol"]');
+    await page.locator('[data-task="praia"]').tap();
     const p = await boardXY(page, 6, 12);
     await page.touchscreen.tap(p.x, p.y);
-    const s = await state(page);
-    assert.deepEqual(s.plans.find(x => x.id === 'sol').scheduled, { id: 'sol', day: 6, start: 10, end: 16 }, `${phone.name}: toque no calendário encaixa`);
-    await page.tap('[data-task="feira"]');
+    assert.deepEqual((await state(page)).week.plans.find(x => x.uid === 'praia'), { uid: 'praia', day: 6, start: 9 }, `${phone.name}: toque no calendário encaixa`);
+    const w = await boardXY(page, 2, 10);
+    await page.touchscreen.tap(w.x, w.y);
+    assert.equal((await state(page)).selected, 'w2', `${phone.name}: tocar no trabalho seleciona o dia de trabalho`);
     await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}.png`) });
     if (phone.name === 'iphone-14' || phone.name === 'iphone-se-1') {
       await page.tap('#picker .picker-close');
-      for (const [id, day, start] of [['curso', 1, 20], ['projeto', 5, 19], ['amigos', 4, 20], ['corpo', 2, 21]]) await put(page, id, day, start, true);
-      await page.tap('#finish-button');
-      if ((await state(page)).dialog === 'finish-dialog') await page.tap('#confirm-finish');
+      await page.tap('#add-chip');
+      await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-sugestoes.png`) });
+      await page.tap('#add-dialog .primary.full');
+      await fillGreedy(page, true);
+      await finishWeek(page, true);
+      assert.equal((await state(page)).mode, 'between');
       assert.equal((await noScroll(page)).horizontal, true);
-      await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-intervalo.png`) });
-      assert.equal(await insideViewport(page, '#next-button'), true, `${phone.name}: botão da 5×2 visível sem rolar`);
-      await page.tap('#next-button');
-      await put(page, 'feira', 5, 8, true);
-      await put(page, 'sol', 5, 10, true);
-      await put(page, 'familia', 6, 12, true);
-      await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-semana-2.png`) });
-      await page.tap('#finish-button');
+      await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-fim-flavio.png`), fullPage: true });
+      if (phone.name === 'iphone-14') assert.equal(await insideViewport(page, '#switch-button'), true, `${phone.name}: "mudar meu voto" visível sem rolar`);
+      await page.locator('#switch-button').tap();
+      await fillGreedy(page, true);
+      await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-semana-lula.png`) });
+      await finishWeek(page, true);
       assert.equal((await state(page)).mode, 'results');
       assert.equal((await noScroll(page)).horizontal, true, `${phone.name}: resultado sem rolagem lateral`);
       await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-resultado.png`), fullPage: true });
-      await page.tap('#share-button');
+      await page.locator('#results .share-cta').tap();
       await page.waitForFunction(() => document.getElementById('share-image').naturalWidth > 0);
       await page.screenshot({ path: path.join(out, `celular-${label}-${phone.name}-compartilhar.png`) });
     }
     await context.close();
   }
   await browser.close();
-  check(`Celular (${label}): de 320×460 a 430×740 o jogo cabe sem rolar, com toque no calendário e na lista`);
+  check(`Celular (${label}): de 320×460 a 430×740 o jogo cabe sem rolar, com toque no calendário, no trabalho e na lista`);
 }
 
 (async () => {

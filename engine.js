@@ -1,5 +1,10 @@
-// FOLGA — regras puras: semanas, planos, encaixes, imprevisto, contas e texto de compartilhamento.
+// FOLGA — regras puras: semanas, dias de trabalho, planos, encaixes, contas e texto de compartilhamento.
 // Sem DOM. Exporta window.FolgaEngine no navegador e module.exports no Node (testes).
+//
+// Tudo se move, em qualquer dia, das 7h às 23h (o sono fica fora do calendário). A escala só diz
+// quantos dias de trabalho existem: seis na 6×1 (cinco de 8h e um de 4h) e cinco na 5×2. Cada dia
+// de trabalho é um bloco com o ônibus de ida, o trabalho, o almoço e o ônibus de volta.
+// Os planos saem de uma lista que o jogador monta (sugestões ou itens próprios).
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -8,226 +13,304 @@
   'use strict';
   const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
   const SHORT_DAYS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
-  const FIRST_HOUR = 7, LAST_HOUR = 23;
+  const FIRST_HOUR = 7, LAST_HOUR = 23, DAY_HOURS = LAST_HOUR - FIRST_HOUR;
   const SITE_URL = 'https://pedroufc-source.github.io/folga/';
+  const COLORS = 12;
 
+  // Rodada 0: semana de quem escolhe Flávio (6×1). Rodada 1: de quem escolhe Lula (5×2).
   const SCENARIOS = [
-    { scale: '6×1', workHours: 44, commuteHours: 12, hoursPerDay: [8, 8, 8, 8, 8, 4, 0] },
-    { scale: '5×2', workHours: 40, commuteHours: 10, hoursPerDay: [8, 8, 8, 8, 8, 0, 0] }
+    { scale: '6×1', candidate: 'Flávio', workHours: 44, commuteHours: 12, work: [8, 8, 8, 8, 8, 4] },
+    { scale: '5×2', candidate: 'Lula', workHours: 40, commuteHours: 10, work: [8, 8, 8, 8, 8] }
   ];
-  const offDays = round => SCENARIOS[round].hoursPerDay.map((h, d) => (h ? -1 : d)).filter(d => d >= 0);
 
-  // Janelas e durações são escolhas de desenho do quebra-cabeça (veja REFERENCIAS.md).
-  // `out` é a forma usada em "ficou de fora …".
-  const ALL = [0, 1, 2, 3, 4, 5, 6];
-  const TASKS = [
-    { id: 'feira', name: 'Fazer a feira', short: 'Feira', emoji: '🍅', hours: 2, days: [5], from: 8, to: 12, out: 'a feira', extra: 'A feira é de manhã.' },
-    { id: 'sol', name: 'Praia ou parque', short: 'Praia', emoji: '🌴', hours: 6, days: [5, 6], from: 10, to: 17, out: 'a praia', extra: 'Seis horas, com ida e volta.' },
-    { id: 'familia', name: 'Almoço de domingo', short: 'Almoço', emoji: '🍲', hours: 3, days: [6], from: 12, to: 16, out: 'o almoço de domingo', extra: 'Três horas, com a família.' },
-    { id: 'curso', name: 'Estudar', short: 'Estudo', emoji: '📚', hours: 3, days: [1, 3], from: 19, to: 23, out: 'o estudo', extra: 'Curso ou estudo em casa.' },
-    { id: 'amigos', name: 'Sair com os amigos', short: 'Amigos', emoji: '🍻', hours: 3, days: [4, 5], from: 19, to: 23, out: 'os amigos', extra: 'Com a volta para casa.' },
-    { id: 'corpo', name: 'Academia ou futebol', short: 'Treino', emoji: '⚽', hours: 2, days: [0, 2], from: 19, to: 23, out: 'o treino', extra: 'Com o trajeto.' },
-    { id: 'projeto', name: 'Tempo pro hobby', short: 'Hobby', emoji: '🎸', hours: 4, days: ALL, from: 19, to: 23, out: 'o hobby', extra: 'Quatro horas seguidas: música, costura, videogame…' },
-    { id: 'nada', name: 'Não fazer nada', short: 'Nada', emoji: '😴', hours: 2, days: ALL, from: 8, to: 23, out: 'o descanso', extra: 'Duas horas sem obrigação nenhuma.' }
-  ];
-  const EVENT = { day: 2, start: 19, end: 20, kind: 'event', label: 'Ônibus atrasado', reason: 'O ônibus atrasou: você ainda está chegando.' };
-  const taskById = id => TASKS.find(task => task.id === id);
+  // Sugestões, sem moralismo: o jogador põe na lista o que quiser. Emojis sem seletor de variação
+  // nem junções (o WebKit desalinha no canvas).
+  const GROUPS = ['Casa', 'Cuidar de si', 'Amor', 'Rolê', 'Família e fé', 'Telas', 'Estudo e grana', 'Descanso'];
+  const CATALOG = [
+    ['faxina', 'Faxina', 'Faxina', '🧹', 4, 'Casa'],
+    ['roupa', 'Lavar roupa', 'Roupa', '🧺', 3, 'Casa'],
+    ['mercado', 'Mercado e feira', 'Mercado', '🛒', 2, 'Casa'],
+    ['cozinhar', 'Cozinhar a semana', 'Cozinhar', '🍳', 3, 'Casa'],
+    ['pet', 'Passear com o cachorro', 'Cachorro', '🐶', 1, 'Casa'],
+    ['salao', 'Salão de beleza', 'Salão', '💇', 3, 'Cuidar de si'],
+    ['unha', 'Fazer a unha', 'Unha', '💅', 2, 'Cuidar de si'],
+    ['academia', 'Academia', 'Academia', '💪', 2, 'Cuidar de si'],
+    ['futebol', 'Futebol', 'Futebol', '⚽', 3, 'Cuidar de si'],
+    ['medico', 'Consulta médica', 'Médico', '🩺', 3, 'Cuidar de si'],
+    ['app', 'App de relacionamento', 'App', '📱', 2, 'Amor'],
+    ['encontro', 'Encontro', 'Encontro', '💘', 4, 'Amor'],
+    ['motel', 'Motel', 'Motel', '🏩', 3, 'Amor'],
+    ['karaoke', 'Karaokê', 'Karaokê', '🎤', 4, 'Rolê'],
+    ['amigas', 'Encontro com as amigas', 'Amigas', '👯', 4, 'Rolê'],
+    ['bar', 'Bar com os amigos', 'Bar', '🍻', 4, 'Rolê'],
+    ['churrasco', 'Churrasco', 'Churras', '🍖', 6, 'Rolê'],
+    ['baile', 'Baile ou balada', 'Baile', '💃', 5, 'Rolê'],
+    ['show', 'Show', 'Show', '🎶', 4, 'Rolê'],
+    ['familia', 'Almoço em família', 'Família', '🍲', 5, 'Família e fé'],
+    ['criancas', 'Brincar com as crianças', 'Crianças', '🧒', 3, 'Família e fé'],
+    ['vo', 'Visitar a vó', 'Vó', '👵', 3, 'Família e fé'],
+    ['culto', 'Igreja ou culto', 'Culto', '🙏', 3, 'Família e fé'],
+    ['bet', 'Jogar na bet', 'Bet', '🎰', 2, 'Telas'],
+    ['videogame', 'Videogame', 'Game', '🎮', 3, 'Telas'],
+    ['serie', 'Maratonar série', 'Série', '📺', 4, 'Telas'],
+    ['estudo', 'Estudar', 'Estudo', '📚', 4, 'Estudo e grana'],
+    ['curso', 'Curso online', 'Curso', '💻', 2, 'Estudo e grana'],
+    ['bico', 'Bico de entregas', 'Bico', '🛵', 4, 'Estudo e grana'],
+    ['nada', 'Não fazer nada', 'Nada', '😴', 4, 'Descanso'],
+    ['praia', 'Praia ou parque', 'Praia', '🌴', 6, 'Descanso']
+  ].map(([id, name, short, emoji, hours, group], i) => ({ id, name, short, emoji, hours, group, color: i % COLORS }));
+  const STARTER = ['faxina', 'mercado', 'salao', 'amigas', 'app', 'karaoke', 'familia', 'praia', 'nada', 'estudo', 'churrasco', 'futebol', 'motel'];
+  const catalogById = id => CATALOG.find(c => c.id === id);
+  const itemFromCatalog = c => ({ uid: c.id, ref: c.id, name: c.name, short: c.short, emoji: c.emoji, hours: c.hours, color: c.color });
+  const starterItems = () => STARTER.map(id => itemFromCatalog(catalogById(id)));
+  function customItem(name, hours, uid, color) {
+    const clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 28);
+    const h = Math.round(Number(hours));
+    if (!clean || !(h >= 1 && h <= 8)) return null;
+    return { uid, ref: null, name: clean, short: clean.length > 9 ? `${clean.slice(0, 8).trimEnd()}…` : clean, emoji: '✨', hours: h, color };
+  }
+
+  // Dia de trabalho: [ônibus 1h][trabalho][almoço 1h][trabalho][ônibus 1h]. O de 4h não tem almoço.
+  const workSpan = hours => (hours === 8 ? 11 : hours + 2);
+  function workSegments(hours, day, start) {
+    const parts = hours === 8
+      ? [[0, 1, 'commute'], [1, 5, 'work'], [5, 6, 'lunch'], [6, 10, 'work'], [10, 11, 'commute']]
+      : [[0, 1, 'commute'], [1, 1 + hours, 'work'], [1 + hours, 2 + hours, 'commute']];
+    return parts.map(([a, b, kind]) => ({ day, start: start + a, end: start + b, kind }));
+  }
+  const defaultWork = round => SCENARIOS[round].work.map((h, i) => ({ uid: `w${i}`, day: i, start: 8 }));
+  const newWeek = round => ({ work: defaultWork(round), plans: [] });
+  const isWork = uid => /^w\d$/.test(uid);
+  const workHoursOf = (round, uid) => SCENARIOS[round].work[Number(uid.slice(1))];
+
   const overlaps = (a, b) => a.start < b.end && b.start < a.end;
-
-  function joinList(items) {
-    if (items.length < 2) return items.join('');
-    return `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}`;
+  const itemOf = (items, uid) => items.find(it => it.uid === uid);
+  function spanOf(round, items, uid) {
+    if (isWork(uid)) { const h = workHoursOf(round, uid); return h ? workSpan(h) : 0; }
+    const it = itemOf(items, uid);
+    return it ? it.hours : 0;
   }
-  function daysText(task) {
-    if (task.days.length === 7) return 'qualquer dia';
-    return joinList(task.days.map(d => DAYS[d].toLowerCase())).replace(/ e (?=[^,]*$)/, ' ou ');
+  function joinList(list) {
+    if (list.length < 2) return list.join('');
+    return `${list.slice(0, -1).join(', ')} e ${list[list.length - 1]}`;
   }
-  // "sábado, entre 8h e 12h"
-  const windowText = task => `${daysText(task)}, entre ${task.from}h e ${task.to}h`;
   const capitalize = text => text.charAt(0).toUpperCase() + text.slice(1);
+  const label = it => `${it.emoji} ${it.name}`;
 
-  function fixedBlocks(round, eventActive = false) {
-    const blocks = [];
-    const add = (day, start, end, kind, label, reason) => blocks.push({ day, start, end, kind, label, reason });
-    for (let day = 0; day < 7; day++) {
-      const hours = SCENARIOS[round].hoursPerDay[day];
-      const late = eventActive && day === EVENT.day;
-      add(day, 7, 8, 'routine', 'Café', 'É a hora do café e de se arrumar.');
-      if (hours === 8) {
-        // O almoço é intervalo, fora das 8h trabalhadas.
-        add(day, 8, 9, 'commute', 'Ônibus', 'Nesse horário você está no ônibus.');
-        add(day, 9, 12, 'work', 'Trabalho', 'Nesse horário você está no trabalho.');
-        add(day, 12, 13, 'routine', 'Almoço', 'É o intervalo de almoço do trabalho.');
-        add(day, 13, 18, 'work', 'Trabalho', 'Nesse horário você está no trabalho.');
-        add(day, 18, 19, 'commute', 'Ônibus', 'Nesse horário você está no ônibus.');
-        if (late) add(day, 20, 21, 'routine', 'Janta', 'Com o atraso, a janta e a casa passaram para as 20h.');
-        else add(day, 19, 20, 'routine', 'Janta', 'É a hora da janta e das coisas de casa.');
-      } else {
-        if (hours === 4) {
-          add(day, 8, 9, 'commute', 'Ônibus', 'Nesse horário você está no ônibus.');
-          add(day, 9, 13, 'work', 'Trabalho', 'Nesse horário você está no trabalho.');
-          add(day, 13, 14, 'commute', 'Ônibus', 'Nesse horário você está no ônibus.');
-        }
-        add(day, 17, 19, 'routine', 'Casa', 'É a hora de cuidar da casa e da janta.');
-      }
+  const REASONS = {
+    commute: 'Nesse horário você está no ônibus.',
+    work: 'Nesse horário você está no trabalho.',
+    lunch: 'É o seu horário de almoço.',
+  };
+  // Tudo o que ocupa a semana, com o tipo de cada pedaço.
+  function blocks(round, week, items, exceptUid = null) {
+    const out = [];
+    for (const w of week.work) {
+      if (w.uid === exceptUid) continue;
+      for (const seg of workSegments(workHoursOf(round, w.uid), w.day, w.start)) out.push({ ...seg, uid: w.uid, reason: REASONS[seg.kind] });
     }
-    if (eventActive) blocks.push({ ...EVENT });
-    return blocks;
+    for (const p of week.plans) {
+      if (p.uid === exceptUid) continue;
+      const it = itemOf(items, p.uid);
+      if (it) out.push({ day: p.day, start: p.start, end: p.start + it.hours, kind: 'plan', uid: p.uid, reason: `Já tem ${label(it)} nesse horário.` });
+    }
+    return out;
   }
+  const workDays = week => week.work.map(w => w.day);
+  const offDays = week => [0, 1, 2, 3, 4, 5, 6].filter(d => !workDays(week).includes(d));
 
-  function checkPlacement(round, placements, eventActive, id, day, start) {
-    const task = taskById(id);
-    if (!task || !Number.isInteger(day) || day < 0 || day > 6 || !Number.isInteger(start)) {
+  function check(round, week, items, uid, day, start) {
+    const span = spanOf(round, items, uid);
+    if (!span || !Number.isInteger(day) || day < 0 || day > 6 || !Number.isInteger(start)) {
       return { ok: false, code: 'invalid', reason: 'Escolha um plano, um dia e um horário.' };
     }
-    const item = { id, day, start, end: start + task.hours };
-    if (!task.days.includes(day) || start < task.from || item.end > task.to) {
-      return { ok: false, code: 'window', reason: `${task.short}: só ${windowText(task)}.` };
+    if (start < FIRST_HOUR) return { ok: false, code: 'sleep', reason: 'Antes das 7h você está dormindo.' };
+    if (start + span > LAST_HOUR) return { ok: false, code: 'sleep', reason: `Não cabe: são ${span}h e às 23h é hora de dormir.` };
+    const item = { day, start, end: start + span };
+    const hit = blocks(round, week, items, uid).find(b => b.day === day && overlaps(item, b));
+    if (hit) {
+      const reason = isWork(uid) && isWork(hit.uid) ? 'Já tem um dia de trabalho nessa data.' : hit.reason;
+      return { ok: false, code: hit.kind, blocker: hit, reason };
     }
-    const fixed = fixedBlocks(round, eventActive).find(b => b.day === day && overlaps(item, b));
-    if (fixed) return { ok: false, code: fixed.kind, blocker: fixed, reason: fixed.reason };
-    const plan = placements.find(p => p.id !== id && p.day === day && overlaps(item, p));
-    if (plan) {
-      const other = taskById(plan.id);
-      return { ok: false, code: 'plan', blocker: plan, reason: `Já tem ${other.emoji} ${other.name} nesse horário.` };
-    }
-    return { ok: true, placement: item };
+    return { ok: true, placement: { uid, day, start } };
   }
-
-  function options(round, placements, eventActive, id, day) {
-    const task = taskById(id);
-    if (!task) return [];
-    const starts = [];
-    for (let start = task.from; start <= task.to - task.hours; start++) {
-      if (checkPlacement(round, placements, eventActive, id, day, start).ok) starts.push(start);
-    }
+  function options(round, week, items, uid, day) {
+    const span = spanOf(round, items, uid), starts = [];
+    for (let s = FIRST_HOUR; s <= LAST_HOUR - span; s++) if (check(round, week, items, uid, day, s).ok) starts.push(s);
     return starts;
   }
-  const allOptions = (round, placements, eventActive, id) =>
-    ALL.flatMap(day => options(round, placements, eventActive, id, day).map(start => ({ day, start })));
+  const allOptions = (round, week, items, uid) =>
+    [0, 1, 2, 3, 4, 5, 6].flatMap(day => options(round, week, items, uid, day).map(start => ({ day, start })));
+  // Uma sugestão por espaço livre: o primeiro início de cada sequência.
+  const runStarts = (round, week, items, uid) =>
+    allOptions(round, week, items, uid).filter((o, i, list) => !(i && list[i - 1].day === o.day && list[i - 1].start === o.start - 1));
 
-  // Início que cobre a hora tocada, com o bloco o mais centrado possível no toque.
-  function resolveStart(round, placements, eventActive, id, day, hour) {
-    const task = taskById(id);
-    if (!task) return null;
-    const covering = options(round, placements, eventActive, id, day).filter(s => s <= hour && hour < s + task.hours);
+  function freeRuns(round, week, items, exceptUid = null) {
+    const busy = blocks(round, week, items, exceptUid), runs = [];
+    for (let day = 0; day < 7; day++) {
+      let start = null;
+      for (let h = FIRST_HOUR; h <= LAST_HOUR; h++) {
+        const free = h < LAST_HOUR && !busy.some(b => b.day === day && h >= b.start && h < b.end);
+        if (free && start === null) start = h;
+        if (!free && start !== null) { runs.push({ day, start, end: h }); start = null; }
+      }
+    }
+    return runs;
+  }
+  function resolveStart(round, week, items, uid, day, hour) {
+    const span = spanOf(round, items, uid);
+    const covering = options(round, week, items, uid, day).filter(s => s <= hour && hour < s + span);
     if (!covering.length) return null;
-    const target = hour + 0.5 - task.hours / 2;
+    const target = hour + 0.5 - span / 2;
     return covering.reduce((best, s) => (Math.abs(s - target) < Math.abs(best - target) ? s : best));
   }
-
-  // Por que um plano não tem nenhum horário na semana inteira.
-  function whyNoRoom(round, placements, eventActive, id) {
-    const task = taskById(id);
-    if (!task || allOptions(round, placements, eventActive, id).length) return null;
-    const others = placements.filter(p => p.id !== id);
-    if (allOptions(round, [], eventActive, id).length) {
-      const blockers = new Set();
-      for (const day of task.days) for (let s = task.from; s <= task.to - task.hours; s++) {
-        const check = checkPlacement(round, others, eventActive, id, day, s);
-        if (check.code === 'plan') blockers.add(check.blocker.id);
-      }
-      const names = [...blockers].map(b => `${taskById(b).emoji} ${taskById(b).name}`);
-      return `Sem espaço: ${daysText(task)} já tem ${joinList(names)}. Mova ou tire um plano.`;
+  function whyNotHere(round, week, items, uid, day, hour) {
+    const span = spanOf(round, items, uid);
+    const run = freeRuns(round, week, items, uid).find(r => r.day === day && hour >= r.start && hour < r.end);
+    const what = isWork(uid) ? 'O dia de trabalho' : itemOf(items, uid).short;
+    if (run) {
+      const n = run.end - run.start;
+      return `Aqui só tem ${n}h livre${n > 1 ? 's' : ''} seguida${n > 1 ? 's' : ''}. ${what} precisa de ${span}h.`;
     }
-    return `Na ${SCENARIOS[round].scale} não cabe: ${windowText(task)}, você está no trabalho ou no ônibus.`;
+    const hit = blocks(round, week, items, uid).find(b => b.day === day && hour >= b.start && hour < b.end);
+    if (hit) return isWork(uid) && isWork(hit.uid) ? 'Já tem um dia de trabalho nessa data.' : hit.reason;
+    return 'Escolha um espaço livre do calendário.';
+  }
+  function whyNoRoom(round, week, items, uid) {
+    if (allOptions(round, week, items, uid).length) return null;
+    const span = spanOf(round, items, uid);
+    const longest = Math.max(0, ...freeRuns(round, week, items, uid).map(r => r.end - r.start));
+    return `Não sobra nenhum espaço de ${span}h seguidas: o maior tem ${longest}h. Mova ou tire alguma coisa.`;
   }
 
-  function put(round, placements, eventActive, id, day, start) {
-    const result = checkPlacement(round, placements, eventActive, id, day, start);
-    return result.ok ? { ...result, placements: [...placements.filter(p => p.id !== id), result.placement] } : result;
+  function move(round, week, items, uid, day, start) {
+    const result = check(round, week, items, uid, day, start);
+    if (!result.ok) return result;
+    const key = isWork(uid) ? 'work' : 'plans';
+    const next = { work: week.work.slice(), plans: week.plans.slice() };
+    next[key] = [...next[key].filter(p => p.uid !== uid), { uid, day, start }];
+    return { ...result, week: next };
   }
+  const unplace = (week, uid) => ({ work: week.work, plans: week.plans.filter(p => p.uid !== uid) });
 
-  function applyEvent(placements) {
-    // Chegando às 20h, a hora de janta e casa passa para 20h–21h.
-    const displaced = { start: 20, end: 21 };
-    const removed = placements.filter(p => p.day === EVENT.day && overlaps(p, displaced));
-    return { removed, placements: placements.filter(p => !removed.includes(p)) };
-  }
-
-  // A semana 2 começa com os encaixes da semana 1 (a 5×2 só libera horas; nada da 6×1 deixa de caber).
-  function carryOver(placements) {
-    const kept = [];
-    for (const p of placements) {
-      const result = checkPlacement(1, kept, true, p.id, p.day, p.start);
-      if (result.ok) kept.push(result.placement);
+  // Leva a semana para a outra escala. Para a 5×2, o dia de 4h some. Para a 6×1, ele volta,
+  // de preferência no sábado de manhã, e o que estiver no caminho sai da semana.
+  function carryOver(week, toRound, items) {
+    const removed = [];
+    let work = week.work.filter(w => workHoursOf(toRound, w.uid));
+    if (work.length < SCENARIOS[toRound].work.length) {
+      const free = [5, 6, 0, 1, 2, 3, 4].filter(d => !work.some(w => w.day === d));
+      const day = free[0];
+      for (let i = work.length; i < SCENARIOS[toRound].work.length; i++) work = [...work, { uid: `w${i}`, day, start: 8 }];
     }
-    return kept;
+    const next = { work, plans: [] };
+    for (const p of week.plans) {
+      const r = check(toRound, next, items, p.uid, p.day, p.start);
+      if (r.ok) next.plans.push({ ...p }); else removed.push(p);
+    }
+    return { week: next, removed };
   }
 
-  function stats(round, placements, eventActive = true) {
-    const scenario = SCENARIOS[round];
-    const available = 168 - 56 - 21 - scenario.workHours - scenario.commuteHours - Number(eventActive);
-    const planned = placements.reduce((sum, p) => sum + (p.end - p.start), 0);
-    return { work: scenario.workHours, commute: scenario.commuteHours, sleep: 56, routine: 21,
-      event: Number(eventActive), available, planned, unallocated: available - planned, count: placements.length,
-      left: TASKS.filter(t => !placements.some(p => p.id === t.id)).map(t => t.id) };
+  function stats(round, week, items) {
+    const s = SCENARIOS[round], lunch = s.work.filter(h => h === 8).length;
+    const busy = s.work.reduce((n, h) => n + workSpan(h), 0);
+    const free = 7 * DAY_HOURS - busy;
+    const placed = week.plans.filter(p => itemOf(items, p.uid));
+    const planned = placed.reduce((n, p) => n + itemOf(items, p.uid).hours, 0);
+    return { work: s.workHours, commute: s.commuteHours, lunch, sleep: 7 * 24 - 7 * DAY_HOURS, free, planned,
+      count: placed.length, total: items.length, left: items.filter(it => !placed.some(p => p.uid === it.uid)).map(it => it.uid) };
   }
 
-  // Maior número de planos que cabem juntos (busca exaustiva com poda; o espaço é pequeno).
-  const maxCache = {};
-  function maxPlans(round, eventActive = true) {
-    const key = `${round}:${eventActive}`;
-    if (maxCache[key]) return maxCache[key];
-    const lists = TASKS.map(t => allOptions(round, [], eventActive, t.id).map(o => ({ id: t.id, day: o.day, start: o.start, end: o.start + t.hours })))
-      .sort((a, b) => a.length - b.length);
-    let best = [];
-    const chosen = [];
-    (function search(i) {
-      if (best.length === TASKS.length || chosen.length + (lists.length - i) <= best.length) return;
-      if (i === lists.length) { best = chosen.slice(); return; }
-      for (const p of lists[i]) {
-        if (chosen.some(c => c.day === p.day && overlaps(c, p))) continue;
-        chosen.push(p); search(i + 1); chosen.pop();
+  // Quantos planos da lista cabem, no máximo, mexendo também no horário do trabalho.
+  // O melhor é encostar cada dia de trabalho numa ponta do dia: sobra um trecho livre por dia.
+  function maxPlans(round, items) {
+    const s = SCENARIOS[round];
+    const caps = s.work.map(h => DAY_HOURS - workSpan(h)).concat(Array(7 - s.work.length).fill(DAY_HOURS));
+    const sizes = items.map(it => it.hours).sort((a, b) => b - a);
+    let best = 0;
+    const seen = new Set();
+    (function search(i, caps, n) {
+      if (best === sizes.length || n + sizes.length - i <= best) return;
+      if (i === sizes.length) { best = n; return; }
+      const key = `${i}|${n}|${[...caps].sort((a, b) => a - b).join(',')}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const tried = new Set();
+      for (let k = 0; k < caps.length; k++) {
+        if (caps[k] < sizes[i] || tried.has(caps[k])) continue;
+        tried.add(caps[k]);
+        const next = caps.slice(); next[k] -= sizes[i];
+        search(i + 1, next, n + 1);
       }
-      search(i + 1);
-    })(0);
-    maxCache[key] = { count: best.length, placements: best };
-    return maxCache[key];
+      search(i + 1, caps, n);
+    })(0, caps, 0);
+    return best;
   }
 
+  function validItem(it) {
+    return it && typeof it.uid === 'string' && /^[a-z0-9-]{1,24}$/.test(it.uid) && !isWork(it.uid) && typeof it.name === 'string' &&
+      it.name.length >= 1 && it.name.length <= 40 && typeof it.short === 'string' && it.short.length <= 16 && typeof it.emoji === 'string' &&
+      it.emoji.length <= 8 && Number.isInteger(it.hours) && it.hours >= 1 && it.hours <= 8 && Number.isInteger(it.color) && it.color >= 0 && it.color < COLORS;
+  }
+  function validWeek(round, week, items) {
+    if (week === null) return true;
+    if (!week || !Array.isArray(week.work) || !Array.isArray(week.plans)) return false;
+    const uids = SCENARIOS[round].work.map((_, i) => `w${i}`);
+    if (week.work.length !== uids.length || !uids.every(u => week.work.some(w => w.uid === u))) return false;
+    const built = { work: [], plans: [] };
+    for (const w of week.work) {
+      const r = check(round, built, items, w.uid, w.day, w.start);
+      if (!r.ok) return false;
+      built.work.push({ uid: w.uid, day: w.day, start: w.start });
+    }
+    for (const p of week.plans) {
+      if (!itemOf(items, p.uid) || built.plans.some(q => q.uid === p.uid)) return false;
+      const r = check(round, built, items, p.uid, p.day, p.start);
+      if (!r.ok) return false;
+      built.plans.push({ uid: p.uid, day: p.day, start: p.start });
+    }
+    return true;
+  }
   function validateSave(data) {
-    if (!data || data.version !== 2 || !['intro', 'playing', 'intermission', 'results'].includes(data.mode)) return null;
-    if (![0, 1].includes(data.round) || !Array.isArray(data.weeks) || data.weeks.length !== 2 ||
-      !Array.isArray(data.events) || data.events.length !== 2 || !data.events.every(v => typeof v === 'boolean')) return null;
-    if ((data.mode === 'intermission' && data.round !== 0) || (data.mode === 'results' && data.round !== 1)) return null;
-    if (data.round === 1 && !data.events[0]) return null;
-    if (['intermission', 'results'].includes(data.mode) && !data.events[data.round]) return null;
-    for (let round = 0; round < 2; round++) {
-      if (!Array.isArray(data.weeks[round]) || data.weeks[round].length > TASKS.length) return null;
-      const clean = [];
-      for (const p of data.weeks[round]) {
-        if (!p || clean.some(c => c.id === p.id)) return null;
-        const result = checkPlacement(round, clean, data.events[round], p.id, p.day, p.start);
-        if (!result.ok || result.placement.end !== p.end) return null;
-        clean.push(result.placement);
-      }
-    }
-    return { version: 2, mode: data.mode, round: data.round, weeks: data.weeks.map(w => w.map(p => ({ id: p.id, day: p.day, start: p.start, end: p.end }))), events: [...data.events] };
+    if (!data || data.version !== 4 || !['playing', 'between', 'results'].includes(data.mode)) return null;
+    if (![0, 1].includes(data.first) || ![0, 1].includes(data.step) || data.round !== (data.step ? 1 - data.first : data.first)) return null;
+    if ((data.mode === 'between' && data.step !== 0) || (data.mode === 'results' && data.step !== 1)) return null;
+    if (!Array.isArray(data.items) || data.items.length > 40 || !data.items.every(validItem)) return null;
+    if (new Set(data.items.map(it => it.uid)).size !== data.items.length) return null;
+    if (!Array.isArray(data.weeks) || data.weeks.length !== 2 || !Number.isInteger(data.nextId)) return null;
+    if (!data.weeks[data.round] || (data.step === 1 && !data.weeks[data.first])) return null;
+    if (![0, 1].every(r => validWeek(r, data.weeks[r], data.items))) return null;
+    return JSON.parse(JSON.stringify({ version: 4, mode: data.mode, first: data.first, step: data.step, round: data.round,
+      items: data.items, weeks: data.weeks, nextId: data.nextId }));
   }
 
   // Linha de dias com as cores de cada semana: verde e amarelo na 6×1; vermelho e estrela na 5×2.
   const STRIP = [['🟩', '🟨'], ['🟥', '⭐']];
-  const dayStrip = round => SCENARIOS[round].hoursPerDay.map(h => STRIP[round][h ? 0 : 1]).join('');
-  function leftOutSentence(round, placements) {
-    const left = TASKS.filter(t => !placements.some(p => p.id === t.id));
+  const dayStrip = (round, week) => [0, 1, 2, 3, 4, 5, 6].map(d => STRIP[round][workDays(week).includes(d) ? 0 : 1]).join('');
+  function leftOutSentence(round, week, items) {
+    const left = items.filter(it => !week.plans.some(p => p.uid === it.uid));
     if (!left.length) return '';
-    return `Na ${SCENARIOS[round].scale}, ${left.length === 1 ? 'ficou' : 'ficaram'} de fora ${joinList(left.map(t => t.out))}.`;
+    return `Com ${SCENARIOS[round].candidate}, ${left.length === 1 ? 'ficou' : 'ficaram'} de fora: ${joinList(left.map(it => it.name.toLowerCase()))}.`;
   }
-  function shareText(weeks, url = SITE_URL) {
-    const fit = round => TASKS.filter(t => weeks[round].some(p => p.id === t.id)).map(t => t.emoji).join('');
+  // `rounds`: as semanas jogadas, na ordem em que aparecem (Flávio antes de Lula).
+  function shareText(weeks, items, rounds, url = SITE_URL) {
     const lines = ['FOLGA · Sua vida cabe na 6×1?', ''];
-    for (const round of [0, 1]) {
-      lines.push(`${SCENARIOS[round].scale} ${dayStrip(round)}`);
-      lines.push(`coube ${weeks[round].length} de 8 ${fit(round)}`.trim(), '');
+    for (const round of rounds) {
+      const week = weeks[round];
+      const fit = items.filter(it => week.plans.some(p => p.uid === it.uid)).map(it => it.emoji).join('');
+      lines.push(`Com ${SCENARIOS[round].candidate} (${SCENARIOS[round].scale}) ${dayStrip(round, week)}`);
+      lines.push(`coube ${stats(round, week, items).count} de ${items.length}${fit ? ` ${fit}` : ''}`, '');
     }
-    const out = leftOutSentence(0, weeks[0]);
+    const focus = rounds.includes(0) ? 0 : rounds[0];
+    const out = leftOutSentence(focus, weeks[focus], items);
     if (out) lines.push(out);
-    lines.push(`E a sua semana? ${url}`);
+    lines.push(`Monte a sua semana: ${url}`);
     return lines.join('\n');
   }
 
-  return { DAYS, SHORT_DAYS, FIRST_HOUR, LAST_HOUR, SITE_URL, SCENARIOS, TASKS, EVENT, offDays, taskById, overlaps,
-    joinList, daysText, windowText, capitalize, fixedBlocks, checkPlacement, options, allOptions, resolveStart, whyNoRoom,
-    put, applyEvent, carryOver, stats, maxPlans, validateSave, dayStrip, leftOutSentence, shareText };
+  return { DAYS, SHORT_DAYS, FIRST_HOUR, LAST_HOUR, DAY_HOURS, SITE_URL, COLORS, SCENARIOS, GROUPS, CATALOG, STARTER,
+    catalogById, itemFromCatalog, starterItems, customItem, workSpan, workSegments, defaultWork, newWeek, isWork, workHoursOf,
+    overlaps, itemOf, spanOf, joinList, capitalize, label, blocks, workDays, offDays, check, options, allOptions, runStarts,
+    freeRuns, resolveStart, whyNotHere, whyNoRoom, move, unplace, carryOver, stats, maxPlans, validateSave, dayStrip,
+    leftOutSentence, shareText };
 });

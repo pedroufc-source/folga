@@ -1,5 +1,15 @@
 # Histórico
 
+## 3.0.0 — 8/10/2026
+
+Versão do segundo turno.
+
+- **Primeira página:** "Você trabalha na escala 6×1. Qual é o seu candidato?" Quem escolhe Flávio monta a 6×1; quem escolhe Lula, a 5×2. No fim aparece "Se arrependeu? Você ainda pode mudar seu voto", que leva à semana do outro, com os mesmos planos.
+- **Tudo se move:** nenhum plano tem dia ou hora marcada. Os dias de trabalho (com ônibus e almoço) também mudam de horário e de dia, e a folga vai junto. Sai o atraso do ônibus.
+- **A lista é do jogador:** 13 sugestões iniciais, catálogo com 31 (casa, cuidar de si, amor, rolê, família e fé, telas, estudo e grana, descanso) e itens próprios. Sem moralismo.
+- O resultado compara as duas semanas e diz o máximo que cabe com a lista do jogador, mesmo mexendo no trabalho.
+- Fontes sobre a posição de cada candidato no diálogo "Como funciona".
+
 ## 2.0.0 — 8/10/2026
 
 Redesenho para publicar e compartilhar.

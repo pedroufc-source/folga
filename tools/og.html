@@ -3,21 +3,22 @@
 <head>
 <meta charset="utf-8">
 <title>FOLGA: imagem de compartilhamento do link</title>
-<!-- Gera og.png (1200×630) com `npm run images`. Usa os tokens e a fonte do jogo. -->
+<!-- Gera og.png (1200×630) com `npm run images`. Usa os tokens, a fonte e os botões do jogo. -->
 <link rel="stylesheet" href="../styles.css">
 <style>
   html, body { width: 1200px; height: 630px; margin: 0; overflow: hidden; }
-  body { display: grid; grid-template-columns: 1fr 470px; gap: 56px; align-items: center; padding: 0 72px; background: var(--paper); }
-  .brand { font-size: 46px; border-width: 5px; padding: 2px 16px 0; display: inline-block; }
-  h1 { margin: 34px 0 18px; font-family: var(--display); font-weight: 400; font-size: 104px; line-height: .95; text-transform: uppercase; }
-  p { margin: 0; font-size: 28px; font-weight: 600; color: var(--muted); }
-  .scales { gap: 22px; margin: 0; }
-  .scale { grid-template-columns: 96px 1fr 70px; padding: 18px 20px; border-radius: 14px; gap: 16px; }
-  .scale-name { font-size: 52px; }
-  .strip { gap: 6px; }
-  .strip i { height: 52px; border-radius: 6px; }
-  .strip svg { max-width: 34px; }
-  .scale small { font-size: 18px; }
+  body { display: grid; grid-template-columns: 1fr 520px; gap: 48px; align-items: center; padding: 0 64px; background: var(--paper); }
+  .brand { font-size: 40px; border-width: 5px; padding: 2px 14px 0; display: inline-block; }
+  .eyebrow { margin: 30px 0 12px; font-size: 18px; }
+  h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 84px; line-height: .98; text-transform: uppercase; }
+  .ask { margin: 18px 0 0; font-size: 40px; }
+  .choices { gap: 18px; }
+  .choice { min-height: 300px; padding: 26px 22px; }
+  .choice-name { font-size: 76px; }
+  .choice .strip { gap: 5px; }
+  .choice .strip i { height: 36px; border-radius: 5px; }
+  .strip svg { max-width: 28px; }
+  .choice-sub { font-size: 21px; }
 </style>
 </head>
 <body>
@@ -27,12 +28,13 @@
   </svg>
   <div>
     <span class="brand">FOLGA</span>
-    <h1>Sua vida cabe na 6×1?</h1>
-    <p>Encaixe oito planos na semana. Depois, tente na 5×2.</p>
+    <p class="eyebrow">Segundo turno · 25 de outubro</p>
+    <h1>Você trabalha na escala 6×1.</h1>
+    <p class="ask">Qual é o seu candidato?</p>
   </div>
-  <div class="scales">
-    <div class="scale scale-0"><b class="scale-name">6×1</b><span class="strip"><i></i><i></i><i></i><i></i><i></i><i></i><i class="off"><svg><use href="#sun"/></svg></i></span><small>44h<br>1 folga</small></div>
-    <div class="scale scale-1"><b class="scale-name">5×2</b><span class="strip"><i></i><i></i><i></i><i></i><i></i><i class="off"><svg><use href="#star"/></svg></i><i class="off"><svg><use href="#star"/></svg></i></span><small>40h<br>2 folgas</small></div>
+  <div class="choices">
+    <div class="choice choice-0"><span class="choice-name">Flávio</span><span class="strip"><i></i><i></i><i></i><i></i><i></i><i></i><i class="off"><svg><use href="#sun"/></svg></i></span><span class="choice-sub">semana 6×1 · 44h</span></div>
+    <div class="choice choice-1"><span class="choice-name"><svg class="choice-star"><use href="#star"/></svg>Lula</span><span class="strip"><i></i><i></i><i></i><i></i><i></i><i class="off"><svg><use href="#star"/></svg></i><i class="off"><svg><use href="#star"/></svg></i></span><span class="choice-sub">semana 5×2 · 40h</span></div>
   </div>
 </body>
 </html>

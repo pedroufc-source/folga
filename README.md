@@ -2,41 +2,46 @@
 
 **Jogue:** https://pedroufc-source.github.io/folga/
 
-Um jogo de dois minutos para celular e computador. Você tem oito planos para a semana: feira, praia, almoço de domingo, estudar, sair com os amigos, treino, um hobby e não fazer nada. Encaixe o que der numa semana de **6×1** (44h de trabalho, uma folga). Depois, a mesma vida na **5×2** (40h, duas folgas): os planos continuam onde estavam e o que ficou de fora ganha outra chance.
+Você trabalha na escala 6×1 e vai votar no segundo turno, em 25 de outubro. **Qual é o seu candidato?**
 
-No fim, o jogo mostra o que coube em cada semana e gera uma imagem para os Stories do Instagram ou o WhatsApp. Na 6×1 deste modelo, nem jogando perfeito cabem mais de 6 planos. Na 5×2, cabem os 8.
+- Escolheu **Flávio**: monte a semana **6×1**, com seis dias de trabalho e 44h.
+- Escolheu **Lula**: monte a semana **5×2**, com cinco dias de trabalho e 40h.
+
+**Tudo se move:** trabalho, almoço, faxina, karaokê, motel, salão, culto, bet. Você decide o dia e a hora. A lista começa com 13 sugestões; dá para tirar, pôr mais do catálogo ou criar o que quiser. No fim aparece **"Se arrependeu? Você ainda pode mudar seu voto"**: a mesma vida na semana do outro candidato. O resultado vira imagem para os Stories e para o WhatsApp.
+
+Com a lista inicial, mesmo mexendo no horário do trabalho, na 6×1 cabem no máximo 12 das 13 coisas. Na 5×2, cabem todas.
 
 ## Como jogar
 
-- **Celular:** toque num plano na parte de baixo. Os espaços verdes no calendário mostram onde ele cabe. Toque num deles, ou num dos horários listados.
-- **Computador:** clique e toque como no celular, ou arraste o plano até o calendário.
-- Para mover, toque no plano já encaixado. Para tirar, use "Tirar da semana". "Desfazer" volta a última jogada.
-- Na quarta, o ônibus atrasa uma hora. Acontece nas duas semanas.
+- **Celular:** toque num plano da lista e depois num espaço verde do calendário. Para mexer no trabalho, toque nele. A lista rola para o lado.
+- **Computador:** clique como no celular ou arraste.
+- "＋ Mais coisas" abre as sugestões e o campo para criar um item. "Desfazer" volta a última jogada.
 
 O progresso fica só no navegador (`localStorage`). Sem cadastro, sem coleta de dados, sem nenhuma requisição externa.
 
 ## Compartilhar
 
-Na tela de resultado, "Compartilhar minha semana" abre:
+Nas telas de resultado, "Compartilhar minha semana" abre quatro opções:
 
-- **Postar nos Stories ou enviar:** no celular, abre o menu de compartilhamento do aparelho com a imagem 1080×1920 (Instagram, WhatsApp e outros).
+- **Postar nos Stories ou enviar:** no celular, abre o menu do aparelho com a imagem 1080×1920 (Instagram, WhatsApp e outros).
 - **WhatsApp:** abre o WhatsApp com um texto pronto e o link do jogo.
-- **Copiar texto** e **Baixar imagem**, para quando o aparelho não compartilha arquivos.
+- **Copiar texto.**
+- **Baixar imagem**, para quando o aparelho não compartilha arquivos.
 
-O link do jogo tem imagem de preview (`og.png`), que aparece quando ele é colado no WhatsApp ou nas redes.
+O link tem imagem de preview (`og.png`), que aparece quando é colado no WhatsApp ou nas redes.
 
 ## Números e fontes
 
-| Horas por semana | 6×1 | 5×2 |
+| Horas por semana | 6×1 (Flávio) | 5×2 (Lula) |
 | --- | ---: | ---: |
 | Trabalho | 44 | 40 |
+| Dias de trabalho | 6 | 5 |
 | Ônibus (2h por dia de trabalho) | 12 | 10 |
+| Almoço nos dias de 8h | 5 | 5 |
 | Sono (23h–7h) | 56 | 56 |
-| Casa, café e janta (3h por dia) | 21 | 21 |
-| Atraso do ônibus na quarta | 1 | 1 |
-| **Livre para os planos** | **34** | **40** |
+| **Livre para você** | **51** | **57** |
 
-As 44h são o limite da Constituição (art. 7º, XIII). As 40h com dois dias de descanso são o que propõe a PEC do fim da escala 6×1. O resto (horários, janelas dos planos, sono, ônibus) é modelo do jogo, não média da população. Detalhes e links em [REFERENCIAS.md](REFERENCIAS.md).
+O limite de 44h está na Constituição (art. 7º, XIII). A PEC do fim da escala 6×1 propõe 40h com dois dias de descanso. O que Lula e Flávio disseram sobre ela está no diálogo "Como funciona", com as fontes. O resto (horários e duração dos planos) é modelo do jogo. Detalhes em [REFERENCIAS.md](REFERENCIAS.md).
 
 ## Rodar e testar
 
