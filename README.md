@@ -2,20 +2,20 @@
 
 **Jogue:** https://pedroufc-source.github.io/folga/
 
-Você trabalha na escala 6×1. Abriu o link, caiu na semana.
+Um simulador de vida dentro de uma agenda. Você trabalha na escala 6×1: abriu o link, caiu na semana de 19 a 25 de outubro de 2026.
 
-1. **A semana 6×1 do Flávio:** seis dias de trabalho, 44h e **2 minutos no relógio** para encaixar a vida. Na primeira visita, uma janela curta explica como jogar; o relógio só anda depois que ela fecha.
-2. O tempo acaba, a semana acaba: **GAME OVER**. "Tá cansado? Você é a favor da escala 6×1?"
-3. **Não:** "Se arrependeu? Você ainda pode mudar seu voto." A mesma vida na **5×2 do Lula**, com cinco dias de trabalho, sem relógio e com os planos no lugar. **Sim:** segunda-feira começa tudo de novo.
-4. O resultado compara as duas semanas e vira imagem para os Stories e o WhatsApp.
+1. **Segunda a sábado é trabalho:** 8h–12h e 13h–17h, sábado até o meio-dia, com 1h de transporte na ida e 1h na volta. Domingo é livre. Você tem **3 minutos**.
+2. **Primeiro, sobreviver:** comida todo dia, mercado, faxina, roupa, marmita, contas e pelo menos **4h de fazer nada**.
+3. **Depois, viver:** família, praia, churrasco, culto, amigas, karaokê, estudo, academia, app de relacionamento, salão, motel. A lista só abre quando o básico estiver na agenda.
+4. **Tudo se move:** cada bloco do dia de trabalho é independente. Transporte de 1h ou 2h, almoço de 1h ou 2h e em outro horário, até 2h de hora extra. A CLT barra mais de 6h seguidas de trabalho, e o jogo mostra o que diz a proposta que Flávio assina.
+5. **Não tem como vencer.** Com a lista inicial, mesmo mexendo no trabalho, na 6×1 cabem no máximo 10 das 11 coisas pra viver. Quando a semana fecha ou o tempo acaba, vem o **GAME OVER**: o que faltou (o básico, o descanso ou a vida), o relato de quem vive a 6×1, vídeos e o que Flávio disse sobre o fim da 6×1.
+6. **"Experimentar a escala 5×2"** traz a mesma semana com dois dias de folga, sem relógio. **"Tentar de novo"** começa outra 6×1. O resultado compara as duas e vira imagem para os Stories e o WhatsApp.
 
-**Tudo se move:** trabalho, almoço, faxina, karaokê, motel, salão, culto, bet. No dia de trabalho dá para fazer hora extra e mudar o almoço, mas a CLT barra trabalho acima de 6h seguidas sem intervalo, e o jogo mostra o que diz a proposta que o Flávio apoia. A lista começa com 13 sugestões; dá para tirar, pôr mais do catálogo ou criar o que quiser.
-
-Com a lista inicial, mesmo mexendo no horário do trabalho e sem relógio, na 6×1 cabem no máximo 12 das 13 coisas. Na 5×2, cabem todas.
+Sem moralismo: dá para tirar sugestões, pôr mais do catálogo (bet, bar, baile, videogame, bico de entregas…) ou criar o que quiser.
 
 ## Como jogar
 
-- **Celular:** toque num plano da lista e depois num espaço verde do calendário. Para mexer no trabalho (horário, dia, hora extra, almoço), toque nele. A lista rola para o lado.
+- **Celular:** toque num item da lista e depois num espaço livre da agenda. Para mexer no trabalho, no almoço ou no transporte, toque no bloco.
 - **Computador:** clique como no celular ou arraste.
 - "＋ Mais coisas" abre as sugestões e o campo para criar um item. "Desfazer" volta a última jogada.
 
@@ -23,7 +23,7 @@ O progresso fica só no navegador (`localStorage`). Sem cadastro, sem coleta de 
 
 ## Compartilhar
 
-Nas telas de resultado, "Compartilhar minha semana" abre quatro opções:
+No resultado, "Compartilhar minha semana" abre quatro opções:
 
 - **Postar nos Stories ou enviar:** no celular, abre o menu do aparelho com a imagem 1080×1920 (Instagram, WhatsApp e outros).
 - **WhatsApp:** abre o WhatsApp com um texto pronto e o link do jogo.
@@ -34,16 +34,18 @@ O link tem imagem de preview (`og.png`), que aparece quando é colado no WhatsAp
 
 ## Números e fontes
 
-| Horas por semana | 6×1 (Flávio) | 5×2 (Lula) |
+| Horas por semana | 6×1 | 5×2 |
 | --- | ---: | ---: |
 | Trabalho | 44 | 40 |
 | Dias de trabalho | 6 | 5 |
-| Transporte (2h por dia de trabalho) | 12 | 10 |
+| Transporte (1h na ida e 1h na volta) | 12 | 10 |
 | Almoço nos dias de 8h | 5 | 5 |
-| Sono (23h–7h) | 56 | 56 |
-| **Livre para você** | **51** | **57** |
+| Sono (23h–6h) | 49 | 49 |
+| Livre | 58 | 64 |
+| Pra sobreviver (casa, comida e 4h de fazer nada) | 22 | 22 |
+| **Sobra pra viver** | **36** | **42** |
 
-O limite de 44h está na Constituição (art. 7º, XIII); hora extra e intervalo, na CLT (arts. 59 e 71). A PEC do fim da escala 6×1 propõe 40h com dois dias de descanso. O que Lula e Flávio disseram, a PEC 12/2026 e o movimento Vida Além do Trabalho estão no diálogo "Como funciona", com as fontes. O resto (horários e duração dos planos) é modelo do jogo. Detalhes em [REFERENCIAS.md](REFERENCIAS.md).
+Os arranjos da jornada vêm do DIEESE, o tempo de transporte do Censo 2022 e da Rede Nossa São Paulo, as horas de casa do IBGE e o sono do CDC. A CLT e a Constituição dão os limites. Os relatos (Agência Brasil, Agência Mural, UOL, TVT, BBC, Brasil de Fato) e a posição de Flávio (InfoMoney, Senado, Folhapress) estão no "Como funciona", com links. A divisão das tarefas, a duração dos planos e as 4h de fazer nada são escolhas do jogo. Detalhes em [REFERENCIAS.md](REFERENCIAS.md).
 
 ## Rodar e testar
 

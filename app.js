@@ -1,19 +1,21 @@
-// FOLGA — interface: quem abre cai direto na semana 6×1 (com relógio e game over), depois na 5×2;
-// calendário em canvas, lista de planos, salvamento, resultado e compartilhamento (Stories/WhatsApp).
+// FOLGA — interface: quem abre cai direto na semana 6×1 (com relógio e game over), depois pode
+// experimentar a 5×2. Calendário em canvas no jeito de uma agenda, listas "pra sobreviver" e
+// "pra viver", edição dos blocos do dia de trabalho, salvamento, resultado e compartilhamento.
 (() => {
   'use strict';
   const E = window.FolgaEngine;
+  const C_ = window.FolgaContent || { relatos: {}, videos: [], flavio: null };
   const $ = id => document.getElementById(id);
-  const KEY = 'folga-v6';
+  const KEY = 'folga-v7';
   const FIRST = E.FIRST_HOUR, LAST = E.LAST_HOUR, ROWS = LAST - FIRST;
   const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif";
   const EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
   const DISPLAY = "Anton, Impact, 'Arial Narrow', sans-serif";
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const fresh = () => ({ version: 6, mode: 'playing', round: 0, clock: E.CLOCK_SECONDS, introSeen: false, items: E.starterItems(), weeks: [E.newWeek(0), null], nextId: 1 });
+  const fresh = () => ({ version: 7, mode: 'playing', round: 0, clock: E.CLOCK_SECONDS, introSeen: false, items: E.starterItems(), weeks: [E.newWeek(0), null], nextId: 1 });
 
   let state = fresh(), storageOK = true;
-  let selected = null, history = [], statusText = '', statusTone = '';
+  let selected = null, part = null, tab = 'survive', history = [], statusText = '', statusTone = '';
   let pointer = null, hover = null, pop = null, geo = null, suppressClick = false, workTap = null, lastTick = 0;
   const share = { ready: null, file: null, url: '', text: '', size: 0 };
 
@@ -27,14 +29,18 @@
   const board = $('board');
   const week = () => state.weeks[state.round];
   const items = () => state.items;
-  const N = () => state.items.length;
-  const who = round => E.SCENARIOS[round].candidate;
+  const survivalItems = () => items().filter(it => it.kind === 'survive');
+  const liveItems = () => items().filter(it => it.kind === 'live');
   const range = (a, b) => `${a}h–${b}h`;
   const isWide = () => window.matchMedia('(min-width: 820px)').matches;
   const timed = () => state.mode === 'playing' && state.round === 0;
   const itemLabel = it => `${it.emoji} ${it.name}`;
+  const shortLabel = it => `${it.emoji} ${it.short}`;
   const placedOf = uid => (E.isWork(uid) ? week().work : week().plans).find(p => p.uid === uid);
   const spanOf = uid => E.spanOf(state.round, week(), items(), uid);
+  const st = () => E.stats(state.round, week(), items());
+  const liveLocked = () => !st().survivalDone;
+  const scaleOf = round => E.SCENARIOS[round].scale;
 
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify({ ...state, clock: Math.max(0, Math.round(state.clock)) })); }
@@ -50,13 +56,13 @@
     const id = r => ({ main: v(`r${r}-main`), deep: v(`r${r}-deep`), on: v(`r${r}-on`), soft: v(`r${r}-soft`), head: v(`r${r}-head`), headInk: v(`r${r}-head-ink`) });
     T = { paper: v('paper'), card: v('card'), ink: v('ink'), muted: v('muted'), board: v('board'), grid: v('grid'),
       hourInk: v('hour-ink'), dayInk: v('day-ink'), work: v('work'), workInk: v('work-ink'), workHatch: v('work-hatch'),
-      extra: v('extra'), commute: v('commute'), lunch: v('routine'), lunchInk: v('routine-ink'), slot: v('slot'), slotFill: v('slot-fill'),
-      bad: v('bad'), badFill: v('bad-fill'), planInk: v('plan-ink'), yellow: v('r0-yellow'), navy: v('r0-navy'),
+      extra: v('extra'), commute: v('commute'), commuteInk: v('commute-ink'), lunch: v('routine'), lunchInk: v('routine-ink'), slot: v('slot'), slotFill: v('slot-fill'),
+      bad: v('bad'), badFill: v('bad-fill'), planInk: v('plan-ink'), yellow: v('r0-yellow'), navy: v('r0-navy'), today: v('today'),
       week: [id(0), id(1)], plan: Array.from({ length: E.COLORS }, (_, i) => v(`plan-${i}`)) };
     return T;
   }
 
-  // ---------- Desenho de uma semana (tabuleiro, miniaturas e imagem de compartilhamento) ----------
+  // ---------- Desenho de uma semana (agenda, miniaturas e imagem de compartilhamento) ----------
   function rr(g, x, y, w, h, r) {
     r = Math.max(0, Math.min(r, w / 2, h / 2));
     g.beginPath(); g.moveTo(x + r, y);
@@ -68,34 +74,59 @@
     g.font = `${Math.round(size)}px ${EMOJI}`; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(text, x, y + size * .06);
   }
-  function textAt(g, text, x, y, size, weight, color, maxW) {
-    g.font = `${weight} ${Math.round(size)}px ${SANS}`; g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
-    if (g.measureText(text).width < maxW) g.fillText(text, x, y);
+  function fitText(g, text, maxW) {
+    if (g.measureText(text).width <= maxW) return text;
+    while (text.length > 1 && g.measureText(`${text}…`).width > maxW) text = text.slice(0, -1);
+    return `${text}…`;
+  }
+  // Evento no estilo de agenda: título e horário à esquerda, no alto do bloco.
+  function eventText(g, r, title, time, color, s) {
+    const pad = 4 * s, size = 10.5 * s;
+    g.fillStyle = color; g.textAlign = 'left'; g.textBaseline = 'top';
+    g.font = `700 ${Math.round(size)}px ${SANS}`;
+    g.fillText(fitText(g, title, r.w - pad * 2), r.x + pad, r.y + pad);
+    if (time && r.h > size * 2.6 + pad) {
+      g.font = `500 ${Math.round(size * .9)}px ${SANS}`;
+      g.fillText(fitText(g, time, r.w - pad * 2), r.x + pad, r.y + pad + size * 1.25);
+    }
   }
   function paintWeek(g, W, H, round, wk, list, o = {}) {
     const C = theme(), id = C.week[round], s = o.scale || 1;
     const gx = o.hours ? (o.gutter || 24) : 0, gy = o.headerH || 18;
     const cw = (W - gx) / 7, rh = (H - gy) / ROWS;
-    const inset = Math.max(1, Math.min(2.2 * s, cw * .05)), rad = Math.min(5 * s, cw / 6);
-    const off = E.offDays(wk);
+    const inset = Math.max(1, Math.min(2 * s, cw * .05)), rad = Math.min(4 * s, cw / 6);
+    const off = E.offDays(wk), labels = o.labels && cw >= 70 * s;
     const box = (day, start, end) => ({ x: gx + day * cw + inset, y: gy + (start - FIRST) * rh + inset, w: cw - 2 * inset, h: (end - start) * rh - 2 * inset });
     g.save();
     g.fillStyle = C.board; g.fillRect(0, 0, W, H);
     for (const d of off) { g.fillStyle = id.soft; g.fillRect(gx + d * cw, gy, cw, ROWS * rh); }
     g.strokeStyle = C.grid; g.lineWidth = Math.max(1, s * .8);
     for (let h = 0; h <= ROWS; h++) { const y = Math.round(gy + h * rh) + .5; g.beginPath(); g.moveTo(gx, y); g.lineTo(W, y); g.stroke(); }
+    for (let d = 1; d < 7; d++) { const x = Math.round(gx + d * cw) + .5; g.beginPath(); g.moveTo(x, gy); g.lineTo(x, gy + ROWS * rh); g.stroke(); }
     if (o.hours) {
       g.fillStyle = C.hourInk; g.font = `${Math.round(9.5 * s)}px ${SANS}`; g.textAlign = 'right'; g.textBaseline = 'middle';
       const every = rh >= 14 * s ? 1 : 2;
       for (let h = 0; h < ROWS; h += every) g.fillText(`${FIRST + h}h`, gx - 4 * s, gy + (h + .5) * rh);
     }
-    g.textAlign = 'center'; g.textBaseline = 'middle';
+    // Cabeçalho de agenda: dia da semana e número do dia; o domingo 25 é o dia do segundo turno.
     for (let d = 0; d < 7; d++) {
-      const x = gx + d * cw, text = o.letters ? E.SHORT_DAYS[d][0] : E.SHORT_DAYS[d];
-      if (off.includes(d)) { g.fillStyle = id.head; rr(g, x + inset, inset, cw - 2 * inset, gy - 2 * inset, rad); g.fill(); g.fillStyle = id.headInk; }
-      else g.fillStyle = C.dayInk;
-      g.font = `800 ${Math.round((o.dayFont || 9.5) * s)}px ${SANS}`;
-      g.fillText(text, x + cw / 2, gy / 2 + .5);
+      const x = gx + d * cw, cx = x + cw / 2, isOff = off.includes(d);
+      if (o.dates) {
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillStyle = isOff ? id.main : C.dayInk; g.font = `800 ${Math.round(8.5 * s)}px ${SANS}`;
+        g.fillText(o.letters ? E.SHORT_DAYS[d][0] : E.SHORT_DAYS[d], cx, gy * .27);
+        const r = gy * .25, cy = gy * .66;
+        if (d === E.ELECTION_DAY) { g.fillStyle = C.today; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill(); g.fillStyle = C.card; }
+        else g.fillStyle = isOff ? id.main : C.ink;
+        g.font = `600 ${Math.round(gy * .34)}px ${SANS}`;
+        g.fillText(String(E.DATES[d]), cx, cy + .5);
+      } else {
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        if (isOff) { g.fillStyle = id.head; rr(g, x + inset, inset, cw - 2 * inset, gy - 2 * inset, rad); g.fill(); g.fillStyle = id.headInk; }
+        else g.fillStyle = C.dayInk;
+        g.font = `800 ${Math.round((o.dayFont || 9.5) * s)}px ${SANS}`;
+        g.fillText(o.letters ? E.SHORT_DAYS[d][0] : E.SHORT_DAYS[d], cx, gy / 2 + .5);
+      }
     }
     const lift = (uid, r) => {
       if (!(o.pop && o.pop.uid === uid)) return;
@@ -113,21 +144,23 @@
           g.save(); rr(g, r.x, r.y, r.w, r.h, rad); g.clip(); g.strokeStyle = C.workHatch; g.lineWidth = s;
           for (let k = -r.h; k < r.w; k += 7 * s) { g.beginPath(); g.moveTo(r.x + k, r.y + r.h); g.lineTo(r.x + k + r.h, r.y); g.stroke(); }
           g.restore();
-          if (o.labels && r.h > 18 * s) textAt(g, 'Trabalho', r.x + r.w / 2, r.y + r.h / 2, 10 * s, 600, C.workInk, r.w - 4);
+          if (labels) eventText(g, r, 'Trabalho', range(seg.start, seg.end), C.workInk, s);
         } else if (seg.kind === 'commute') {
-          emojiAt(g, '🚌', r.x + r.w / 2, r.y + r.h / 2, Math.min(r.h * .72, r.w * .5, 15 * s));
-        } else if (o.labels && r.h > 12 * s) {
-          textAt(g, 'Almoço', r.x + r.w / 2, r.y + r.h / 2, 9.5 * s, 600, C.lunchInk, r.w - 4);
+          if (labels && r.h > 16 * s) eventText(g, r, `🚌 ${seg.part === 'tin' ? 'Ida' : 'Volta'}`, null, C.commuteInk, s);
+          else emojiAt(g, '🚌', r.x + r.w / 2, r.y + r.h / 2, Math.min(r.h * .72, r.w * .5, 15 * s));
+        } else if (labels && r.h > 12 * s) {
+          eventText(g, r, 'Almoço', null, C.lunchInk, s);
+        }
+        if (o.selected === w.uid && o.part && (seg.part === o.part || (o.part === seg.kind && seg.kind !== 'commute'))) {
+          g.lineWidth = 2.5 * s; g.strokeStyle = C.yellow; rr(g, r.x, r.y, r.w, r.h, rad); g.stroke();
         }
       }
-      // Hora extra: as últimas horas de trabalho ganham uma faixa de alerta.
       if (w.extra) {
         const segs = E.workSegments(hours, w).filter(x => x.kind === 'work'), last = segs[segs.length - 1];
         const r = box(w.day, last.end - w.extra, last.end);
-        g.fillStyle = C.extra; rr(g, r.x, r.y, r.w, Math.max(3 * s, r.h * .18), rad); g.fill();
-        if (o.labels && r.h > 14 * s) textAt(g, `+${w.extra}h extra`, r.x + r.w / 2, r.y + r.h / 2 + 3 * s, 9 * s, 800, C.extra, r.w - 4);
+        g.fillStyle = C.extra; rr(g, r.x, r.y + r.h - Math.max(3 * s, r.h * .18), r.w, Math.max(3 * s, r.h * .18), rad); g.fill();
       }
-      if (o.selected === w.uid) { g.lineWidth = 3 * s; g.strokeStyle = C.yellow; rr(g, whole.x - 1, whole.y - 1, whole.w + 2, whole.h + 2, rad); g.stroke(); g.lineWidth = 1.5 * s; g.strokeStyle = C.ink; g.stroke(); }
+      if (o.selected === w.uid) { g.lineWidth = 1.5 * s; g.strokeStyle = C.ink; rr(g, whole.x - 1, whole.y - 1, whole.w + 2, whole.h + 2, rad); g.stroke(); }
       g.restore();
     }
     for (const p of wk.plans) {
@@ -136,16 +169,10 @@
       const r = box(p.day, p.start, p.start + it.hours);
       g.save(); lift(p.uid, r);
       g.fillStyle = C.plan[it.color]; rr(g, r.x, r.y, r.w, r.h, rad); g.fill();
-      if (o.selected === p.uid) { g.lineWidth = 2.5 * s; g.strokeStyle = C.ink; g.stroke(); }
-      const es = Math.min(r.h * .55, r.w * .6, (o.emoji || 20) * s);
-      const named = o.labels && r.h >= es + 18 * s && r.w >= 44 * s;
-      emojiAt(g, it.emoji, r.x + r.w / 2, r.y + r.h / 2 - (named ? 7 * s : 0), es);
-      if (named) {
-        g.font = `800 ${Math.round(10.5 * s)}px ${SANS}`;
-        let t = it.short;
-        while (t.length > 1 && g.measureText(t).width > r.w - 6) t = t.slice(0, -1);
-        textAt(g, t, r.x + r.w / 2, r.y + r.h / 2 + es / 2 + 3 * s, 10.5 * s, 800, C.planInk, r.w);
-      }
+      if (it.kind === 'survive') { g.fillStyle = C.ink; g.globalAlpha = .55; g.fillRect(r.x, r.y, Math.max(2, 3 * s), r.h); g.globalAlpha = 1; }
+      if (o.selected === p.uid) { g.lineWidth = 2.5 * s; g.strokeStyle = C.ink; rr(g, r.x, r.y, r.w, r.h, rad); g.stroke(); }
+      if (labels) eventText(g, r, `${it.emoji} ${it.short}`, range(p.start, p.start + it.hours), C.planInk, s);
+      else emojiAt(g, it.emoji, r.x + r.w / 2, r.y + r.h / 2, Math.min(r.h * .6, r.w * .6, (o.emoji || 20) * s));
       g.restore();
     }
     if (o.region) {
@@ -194,7 +221,7 @@
     return { uid, day: pt.day, start, end: start + span, ok: false };
   }
   function drawBoard() {
-    if (state.mode !== 'playing' && state.mode !== 'gameover') return;
+    if (state.mode === 'results') return;
     const { g, W, H } = fitCanvas(board);
     if (W < 20 || H < 20) return;
     const big = W >= 520;
@@ -205,8 +232,8 @@
       popK = { uid: pop.uid, k: .72 + .28 * (1 - Math.pow(1 - p, 3)) + Math.sin(p * Math.PI) * .08 };
     }
     geo = paintWeek(g, W, H, state.round, week(), items(), {
-      hours: true, gutter: big ? 36 : 24, headerH: big ? 28 : 18, labels: big, scale: big ? 1.1 : 1, emoji: big ? 22 : 18,
-      dayFont: big ? 10 : 9.5, selected, region: focusId ? regionFor(focusId) : null,
+      hours: true, gutter: big ? 36 : 24, headerH: big ? 40 : 30, labels: big, scale: big ? 1.05 : 1, emoji: big ? 22 : 18, dates: true,
+      selected, part, region: focusId ? regionFor(focusId) : null,
       preview: focusId && hover ? previewFor(focusId, hover) : null, pop: popK });
   }
   function animatePop() {
@@ -258,57 +285,88 @@
     el.className = `status${tone ? ` ${tone}` : ''}`;
     if (animate && tone === 'error' && !reduceMotion) { void el.offsetWidth; el.classList.add('shake'); }
   }
-  function select(uid, fromKeyboard = false) {
-    selected = uid; workTap = null;
-    const why = E.whyNoRoom(state.round, week(), items(), uid);
-    if (E.isWork(uid)) say('Dia de trabalho: mova para outro horário ou dia, faça hora extra ou mude o almoço. O trabalho não sai da semana.');
-    else if (why) say(why, 'error');
+  const PARTS = {
+    tin: 'Transporte de ida: 1h ou 2h. Dá para usar o mesmo em todos os dias.',
+    tout: 'Transporte de volta: 1h ou 2h. Dá para usar o mesmo em todos os dias.',
+    lunch: 'Almoço: mais cedo, mais tarde, de 1h ou 2h. Sem almoço, a CLT não deixa passar de 6h seguidas.',
+    work: 'Trabalho: toque num espaço livre para mudar o horário ou o dia. Hora extra até 2h.'
+  };
+  function select(uid, fromKeyboard = false, newPart = null) {
+    selected = uid; part = E.isWork(uid) ? (newPart || 'work') : null; workTap = null;
+    if (E.isWork(uid)) say(PARTS[part]);
     else {
-      const it = E.itemOf(items(), uid);
-      say(placedOf(uid) ? `Para mover, toque em outro espaço verde. ${it.name}: ${it.hours}h seguidas.` : `${itemLabel(it)}: ${it.hours}h seguidas. Toque num espaço verde, no dia e na hora que quiser.`);
+      const it = E.itemOf(items(), uid), why = E.whyNoRoom(state.round, week(), items(), uid);
+      const count = it.times > 1 ? ` (${E.placedCount(week(), it)} de ${it.times})` : '';
+      if (why && !placedOf(uid)) say(why, 'error');
+      else say(placedOf(uid) ? `Para mover, toque em outro espaço verde. ${it.name}${count}.` : `${itemLabel(it)}${count}: ${it.hours}h. Toque num espaço verde.`);
     }
     renderGame();
-    if (fromKeyboard) { const p = $('picker'); (p.querySelector('.slot') || p.querySelector('.remove-button') || p.querySelector('.picker-close'))?.focus(); }
+    if (fromKeyboard) { const p = $('picker'); (p.querySelector('.slot') || p.querySelector('.tool') || p.querySelector('.picker-close'))?.focus(); }
   }
   function deselect(message = 'Escolha outra coisa quando quiser.') {
-    const uid = selected; selected = null; say(message); renderGame();
+    const uid = selected; selected = null; part = null; say(message); renderGame();
     return uid;
   }
-  function remember() { history.push(JSON.parse(JSON.stringify(week()))); if (history.length > 40) history.shift(); }
+  function remember() { history.push(JSON.parse(JSON.stringify(week()))); if (history.length > 60) history.shift(); }
   function bump() { const score = $('score'); score.classList.remove('bump'); void score.offsetWidth; score.classList.add('bump'); }
+  function chipFor(it) {
+    if (it.kind === 'live' && liveLocked()) { say(`Primeiro, o que é pra sobreviver. ${missingText()}`, 'error'); tab = 'survive'; renderGame(); return; }
+    const next = E.nextInstance(week(), it);
+    const target = next || week().plans.filter(p => E.baseOf(p.uid) === it.uid).map(p => p.uid).pop();
+    if (selected === target) { deselect(); return; }
+    select(target);
+  }
+  function missingText() {
+    const s = st();
+    if (s.survivalDone) return '';
+    return `Falta: ${E.joinList(s.missing.map(x => `${x.item.short.toLowerCase()}${x.item.times > 1 ? ` (${x.placed}/${x.times})` : ''}`))}.`;
+  }
   function place(uid, day, start) {
+    const wasDone = st().survivalDone;
     const result = E.move(state.round, week(), items(), uid, day, start);
     if (!result.ok) { say(result.reason, 'error'); drawBoard(); return false; }
     remember();
     state.weeks[state.round] = result.week;
-    selected = null; hover = null;
-    const span = spanOf(uid), n = E.stats(state.round, week(), items()).count;
+    selected = null; part = null; hover = null;
+    const span = spanOf(uid), s = st();
     if (E.isWork(uid)) say(`Trabalho: ${E.DAYS[day].toLowerCase()}, ${range(start, start + span)}, com transporte.`, 'good');
-    else say(`${itemLabel(E.itemOf(items(), uid))}: ${E.DAYS[day].toLowerCase()}, ${range(start, start + span)}.${n === N() ? ' Coube tudo!' : ''}`, 'good');
+    else {
+      const it = E.itemOf(items(), uid), next = E.nextInstance(week(), it);
+      if (next && it.times > 1) {
+        // Plano que se repete: segue encaixando a próxima vez.
+        selected = next;
+        say(`${itemLabel(it)}: ${E.placedCount(week(), it)} de ${it.times}. Toque no próximo espaço.`, 'good');
+      } else if (!wasDone && s.survivalDone) {
+        tab = 'live';
+        say(`Sobreviveu. Agora, viver: sobraram ${s.unplanned}h livres na semana.`, 'good');
+      } else say(`${itemLabel(it)}: ${E.DAYS[day].toLowerCase()}, ${range(start, start + it.hours)}.`, 'good');
+      bump();
+    }
     save(); renderGame();
-    if (!E.isWork(uid)) bump();
     if (!reduceMotion) { pop = { uid, t0: performance.now() }; requestAnimationFrame(animatePop); }
     return true;
   }
   const LAW_SOURCE = '<a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" target="_blank" rel="noopener noreferrer">CLT no Planalto</a>';
   function law(text, withFlavio) {
     $('law-text').textContent = text;
-    $('law-flavio').textContent = withFlavio ? 'Na PEC 12/2026, que Flávio apoia, o contrato individual pode valer mais que a convenção coletiva.' : '';
+    $('law-flavio').textContent = withFlavio ? 'Na PEC 12/2026, que Flávio assina, o contrato individual pode valer mais que a convenção coletiva.' : '';
     $('law-source').innerHTML = `Fonte: ${LAW_SOURCE}${withFlavio ? ' · <a href="https://jornaldebrasilia.com.br/noticias/economia/entenda-as-propostas-pelo-fim-da-escala-6x1-de-flavio-bolsonaro-e-lula/" target="_blank" rel="noopener noreferrer">Jornal de Brasília, 7/10/2026</a>' : ''}.`;
     openDialog('law-dialog');
   }
-  function editWork(change) {
-    const uid = selected, r = E.editWork(state.round, week(), items(), uid, change);
+  function editWork(change, all = false) {
+    const uid = selected;
+    const r = all ? E.editAllTransport(state.round, week(), items(), change.tin, change.tout) : E.editWork(state.round, week(), items(), uid, change);
     if (!r.ok) {
-      if (r.code === 'clt71') { law(r.reason, true); say('A CLT não deixa: mais de 6h seguidas pede intervalo.', 'error', false); }
-      else if (r.code === 'clt59') { law(r.reason, false); say('A CLT não deixa mais de 2h extras por dia.', 'error', false); }
+      if (r.code === 'clt71') { law(E.CLT71, true); say('A CLT não deixa: mais de 6h seguidas pede intervalo.', 'error', false); }
+      else if (r.code === 'clt59') { law(E.CLT59, false); say('A CLT não deixa mais de 2h extras por dia.', 'error', false); }
       else say(r.reason, 'error');
       return;
     }
     remember();
     state.weeks[state.round] = r.week;
-    const w = r.work, h = E.workHoursOf(state.round, uid);
-    say(`Trabalho de ${E.DAYS[w.day].toLowerCase()}: ${h + w.extra}h${w.extra ? ` (${w.extra}h extra)` : ''}, ${w.lunch ? `almoço depois de ${w.lunchAt}h de trabalho` : 'sem almoço'}.`, 'good');
+    const w = week().work.find(x => x.uid === uid), h = E.workHoursOf(state.round, uid);
+    say(all ? `Transporte de ${change.tin}h na ida e ${change.tout}h na volta, em todos os dias de trabalho.`
+      : `${E.DAYS[w.day]}: ida ${w.tin}h, ${h + w.extra}h de trabalho${w.extra ? ` (${w.extra}h extra)` : ''}, ${w.lunch ? `almoço de ${w.lunchLen}h` : 'sem almoço'}, volta ${w.tout}h.`, 'good');
     save(); renderGame();
   }
   function removePlan(uid) {
@@ -317,44 +375,52 @@
     state.weeks[state.round] = E.unplace(week(), uid);
     selected = null;
     say(`${itemLabel(E.itemOf(items(), uid))} saiu da semana.`); save(); renderGame();
-    document.querySelector(`[data-task="${uid}"]`)?.focus({ preventScroll: true });
   }
   function deleteItem(uid) {
     const it = E.itemOf(items(), uid);
-    if (!it || state.round !== 0) return;
+    if (!it || it.kind !== 'live' || state.round !== 0) return;
     state.items = items().filter(x => x.uid !== uid);
-    state.weeks = state.weeks.map(w => (w ? E.unplace(w, uid) : w));
-    history = []; if (selected === uid) selected = null;
+    state.weeks = state.weeks.map(w => (w ? E.unplaceItem(w, uid) : w));
+    history = []; if (selected && E.baseOf(selected) === uid) selected = null;
     say(`${itemLabel(it)} saiu da sua lista.`); save(); renderGame(); renderCatalog();
   }
   function addItem(it) {
-    if (!it || items().length >= 40 || items().some(x => x.uid === it.uid)) return false;
+    if (!it || items().length >= 50 || items().some(x => x.uid === it.uid)) return false;
     state.items = [...items(), it]; history = [];
-    say(`${itemLabel(it)} entrou na lista. Toque nele e escolha onde encaixar.`); save(); renderGame(); renderCatalog();
+    say(`${itemLabel(it)} entrou na lista "pra viver".`); save(); renderGame(); renderCatalog();
     return true;
   }
   function undo() {
     if (!history.length) return;
-    state.weeks[state.round] = history.pop(); selected = null;
+    state.weeks[state.round] = history.pop(); selected = null; part = null;
     say('Desfeito.'); save(); renderGame();
+  }
+  function partAt(pt, uid) {
+    const w = week().work.find(x => x.uid === uid);
+    const seg = E.workSegments(E.workHoursOf(state.round, uid), w).find(x => pt.hour >= x.start && pt.hour < x.end);
+    return seg ? (seg.part || seg.kind) : 'work';
   }
   function tapBoard(pt) {
     if (!pt) return;
     const hit = blockAt(pt);
     if (selected) {
-      const start = E.resolveStart(state.round, week(), items(), selected, pt.day, pt.hour);
-      const cur = placedOf(selected);
-      if (start !== null && !(hit && hit.uid === selected && cur && cur.day === pt.day && cur.start === start)) { place(selected, pt.day, start); return; }
-      if (hit && E.isWork(hit.uid) && !E.isWork(selected) && workTap !== hit.uid) {
-        // Primeiro toque no trabalho explica; o segundo seleciona o dia de trabalho para mexer.
-        workTap = hit.uid; say(`${hit.reason} Para mexer no trabalho, toque nele de novo.`, 'error'); drawBoard(); return;
+      // Tocar no próprio bloco: no dia de trabalho, escolhe a parte tocada; num plano, solta.
+      if (hit && hit.uid === selected) {
+        if (E.isWork(selected)) select(selected, false, partAt(pt, selected));
+        else deselect('Ficou no mesmo lugar.');
+        return;
       }
-      if (hit && hit.uid !== selected) { select(hit.uid); return; }
-      if (hit) { deselect('Ficou no mesmo lugar.'); return; }
+      const start = E.resolveStart(state.round, week(), items(), selected, pt.day, pt.hour);
+      if (start !== null) { place(selected, pt.day, start); return; }
+      if (hit && E.isWork(hit.uid) && !E.isWork(selected) && workTap !== hit.uid) {
+        // Primeiro toque no trabalho explica; o segundo seleciona o bloco para mexer.
+        workTap = hit.uid; say(`${hit.reason} Para mexer nesse bloco, toque nele de novo.`, 'error'); drawBoard(); return;
+      }
+      if (hit) { select(hit.uid, false, E.isWork(hit.uid) ? partAt(pt, hit.uid) : null); return; }
       say(E.whyNotHere(state.round, week(), items(), selected, pt.day, pt.hour), 'error'); drawBoard(); return;
     }
-    if (hit) { select(hit.uid); return; }
-    say('Escolha um plano na lista e toque num espaço livre. Para mexer no trabalho, toque nele.');
+    if (hit) { select(hit.uid, false, E.isWork(hit.uid) ? partAt(pt, hit.uid) : null); return; }
+    say(liveLocked() ? `Escolha algo da lista "pra sobreviver" e toque num espaço livre. ${missingText()}` : 'Escolha um plano na lista e toque num espaço livre.');
   }
   function drop(uid, pt) {
     hover = null;
@@ -365,9 +431,11 @@
   }
   function askFinish() {
     if (state.round === 0) { gameOver('closed'); return; }
-    const st = E.stats(state.round, week(), items());
-    if (st.count === N()) { finish(); return; }
-    $('finish-detail').textContent = `Coube ${st.count} de ${N()}. Fica de fora: ${E.joinList(st.left.map(uid => itemLabel(E.itemOf(items(), uid))))}.`;
+    const v = E.verdict(1, week(), items());
+    if (v.code === 'all') { finish(); return; }
+    $('finish-detail').textContent = v.code === 'survival' ? `Ainda falta o básico. ${missingText()}`
+      : v.code === 'rest' ? `Você descansou ${v.stats.rest}h. O mínimo é ${E.REST_MIN}h.`
+        : `Ficou de fora: ${E.joinList(v.stats.liveLeft.map(uid => itemLabel(E.itemOf(items(), uid))))}.`;
     openDialog('finish-dialog');
   }
   function finish() {
@@ -378,58 +446,63 @@
   // ---------- Game over da 6×1 ----------
   function gameOver(why) {
     if (state.mode !== 'playing' || state.round !== 0) return;
-    state.mode = 'gameover'; selected = null; pointer = null; hover = null;
+    state.mode = 'gameover'; selected = null; part = null; pointer = null; hover = null;
     save(); renderGame(); showGameOver(why);
   }
-  function showGameOver(why = 'time') {
-    const st = E.stats(0, state.weeks[0], items());
-    $('go-why').textContent = why === 'closed' ? 'Você fechou a semana. A 6×1 fecha você.' : 'O tempo acabou. A semana também.';
-    $('go-score').innerHTML = st.count === N()
-      ? `Coube tudo, mas sobraram ${st.free - st.planned}h livres na semana inteira.`
-      : st.left.length > 4
-        ? `Coube ${st.count} de ${N()}. <b>Ficaram de fora ${st.left.length} coisas:</b> ${st.left.map(uid => E.itemOf(items(), uid).emoji).join(' ')}`
-        : `Coube ${st.count} de ${N()}. <b>Ficou de fora:</b> ${E.joinList(st.left.map(uid => itemLabel(E.itemOf(items(), uid))))}.`;
-    $('go-ask').hidden = false; $('go-answer').hidden = true;
-    openDialog('gameover-dialog');
-    // Foco no título, para nenhuma resposta parecer marcada de antemão.
-    $('go-title').focus({ preventScroll: true });
-  }
-  function answer(yes) {
-    $('go-ask').hidden = true; $('go-answer').hidden = false;
-    $('go-again').hidden = !yes;
-    if (yes) {
-      $('go-reply').textContent = 'Então segunda-feira começa tudo de novo.';
-      $('go-text').textContent = 'Seis dias de trabalho, um de folga. E o relógio volta a correr.';
-      $('go-lula').innerHTML = `Ver como seria com ${who(1)} <span aria-hidden="true">→</span>`;
-    } else {
-      $('go-reply').textContent = 'Se arrependeu? Você ainda pode mudar seu voto.';
-      $('go-text').textContent = `Existe vida além do trabalho. Com ${who(1)}, a mesma vida na 5×2: 40h de trabalho, um dia inteiro a mais de folga e sem relógio. Seus planos vão junto.`;
-      $('go-lula').innerHTML = `Mudar meu voto para ${who(1)} <span aria-hidden="true">→</span>`;
+  const extLink = (url, text) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}<span aria-hidden="true"> ↗</span></a>`;
+  const flavioHTML = () => (C_.flavio ? `${C_.flavio.text} ${C_.flavio.sources.map(x => extLink(x.url, x.label)).join(' · ')}` : '');
+  const verdictText = (round, v) => {
+    const s = v.stats;
+    if (v.code === 'survival') {
+      const miss = s.missing.filter(x => x.item.uid !== 'nada');
+      return { head: 'Faltou o básico.', detail: `${miss.length > 1 ? 'Ficaram' : 'Ficou'} de fora: ${E.joinList(miss.map(x => `${shortLabel(x.item)}${x.times > 1 ? ` (${x.placed} de ${x.times})` : ''}`))}.` };
     }
-    $('go-lula').focus();
+    if (v.code === 'rest') return { head: 'Faltou descanso.', detail: `Você sobreviveu, mas fez nada por só ${s.rest}h na semana. O mínimo é ${E.REST_MIN}h.` };
+    if (v.code === 'live') return { head: 'Sobreviveu. Viver, não deu.', detail: `${s.liveLeft.length > 1 ? 'Ficaram' : 'Ficou'} de fora: ${E.joinList(s.liveLeft.map(uid => shortLabel(E.itemOf(items(), uid))))}.` };
+    return { head: 'Coube tudo. No limite.', detail: `Sobraram ${s.unplanned}h livres na semana inteira.` };
+  };
+  function showGameOver(why = 'time') {
+    const v = E.verdict(0, state.weeks[0], items()), t = verdictText(0, v);
+    $('go-why').textContent = `${why === 'closed' ? 'Você fechou a semana.' : 'O tempo acabou.'} ${t.head}`;
+    $('go-score').textContent = t.detail;
+    const r = C_.relatos && C_.relatos[v.code];
+    $('go-relato').hidden = !r;
+    if (r) {
+      $('go-quote').textContent = `“${r.quote}”`;
+      $('go-who').innerHTML = `${r.who}. ${extLink(r.url, `${r.video ? '▶ ' : ''}${r.source}`)}`;
+    }
+    $('go-flavio').innerHTML = flavioHTML();
+    $('go-flavio').hidden = !C_.flavio;
+    const vids = C_.videos || [];
+    $('go-videos').innerHTML = vids.length ? `<b>Assista:</b> ${vids.map(x => extLink(x.url, `▶ ${x.label} (${x.source})`)).join(' ')}` : '';
+    $('go-videos').hidden = !vids.length;
+    openDialog('gameover-dialog');
+    // Foco no título, para nenhum botão parecer escolhido de antemão.
+    $('go-title').focus({ preventScroll: true });
   }
   function againSixOne() {
     closeDialog($('gameover-dialog'));
-    state.mode = 'playing'; state.clock = E.CLOCK_SECONDS; history = [];
-    say('Mais uma semana na 6×1. O relógio voltou a correr.', 'error', false);
+    state.mode = 'playing'; state.clock = E.CLOCK_SECONDS; state.weeks = [E.newWeek(0), null]; history = []; tab = 'survive';
+    lastTick = performance.now();
+    say('Mais uma semana na 6×1. Segunda-feira começa tudo de novo.', 'error', false);
     save(); render(); focusHeading();
   }
-  function toLula() {
+  function toFiveTwo() {
     closeDialog($('gameover-dialog'));
     const carried = E.carryOver(state.weeks[0], 1, items());
-    state.round = 1; state.weeks[1] = carried.week; state.mode = 'playing'; selected = null; history = []; share.ready = null;
-    say(`Com ${who(1)}, são 5 dias de trabalho e um dia inteiro a mais pra você. Sem relógio. Encaixe o que ficou de fora.`);
+    state.round = 1; state.weeks[1] = carried.week; state.mode = 'playing'; selected = null; part = null; history = []; share.ready = null;
+    tab = st().survivalDone ? 'live' : 'survive';
+    say(`Escala 5×2: cinco dias de trabalho, um dia inteiro a mais pra você e sem relógio. Sobram ${st().unplanned}h livres.`);
     save(); render(); focusHeading();
   }
   const firstHint = () => (isWide()
-    ? 'Escolha um plano na lista (ou arraste) e solte num espaço livre. Tudo se move, até o trabalho.'
-    : 'Toque num plano e depois num espaço livre. Tudo se move, até o trabalho.');
+    ? 'Comece pelo que é pra sobreviver: escolha na lista (ou arraste) e solte num espaço livre.'
+    : 'Comece pelo que é pra sobreviver: toque na lista e depois num espaço livre.');
   function restart() {
     closeDialog($('restart-dialog'));
-    state = fresh(); state.introSeen = true; selected = null; history = []; statusText = ''; share.ready = null;
+    state = fresh(); state.introSeen = true; selected = null; part = null; history = []; statusText = ''; share.ready = null; tab = 'survive';
     lastTick = performance.now(); save(); render(); focusHeading();
   }
-  // Primeira visita: a janela curta de "como jogar" abre por cima da semana; o relógio só anda depois.
   function showHowto() {
     openDialog('howto-dialog');
     $('howto-start').focus({ preventScroll: true });
@@ -444,26 +517,36 @@
     if (screen === 'game') renderGame();
     else renderResults();
   }
+  function chipHTML(it) {
+    const placed = E.placedCount(week(), it), done = placed >= it.times, locked = it.kind === 'live' && liveLocked();
+    const p = it.times === 1 ? week().plans.find(x => E.baseOf(x.uid) === it.uid) : null;
+    const meta = it.times > 1 ? `${placed}/${it.times}` : p ? `<span class="tick">✓ </span>${E.SHORT_DAYS[p.day]}<span class="hour"> ${p.start}h</span>` : `${it.hours}h`;
+    const where = it.times > 1 ? `${placed} de ${it.times} encaixados` : p ? `${E.DAYS[p.day]}, ${range(p.start, p.start + it.hours)}` : 'fora da semana';
+    const sel = selected && E.baseOf(selected) === it.uid;
+    return `<button class="chip${done ? ' placed' : ''}${locked ? ' locked' : ''}" data-task="${it.uid}" style="--c: var(--plan-${it.color})" aria-pressed="${sel}" aria-label="${it.name}, ${it.hours} hora${it.hours > 1 ? 's' : ''}${it.times > 1 ? ` cada, ${it.times} vezes` : ''}, ${where}${locked ? ', bloqueado até sobreviver' : ''}">` +
+      `<span class="emoji" aria-hidden="true">${locked ? '🔒' : it.emoji}</span><span class="name short">${it.short}</span><span class="name full">${it.name}</span>` +
+      `<span class="meta">${meta}</span></button>`;
+  }
   function renderGame() {
-    const sc = E.SCENARIOS[state.round], st = E.stats(state.round, week(), items());
+    const sc = E.SCENARIOS[state.round], s = st();
     document.body.dataset.round = String(state.round);
     $('week-scale').textContent = sc.scale;
-    $('week-step').textContent = `Com ${who(state.round)}`;
+    $('week-step').textContent = state.round ? 'Vida além do trabalho' : 'Com Flávio';
     $('band-icon-use').setAttribute('href', state.round ? '#star' : '#arminha');
-    $('week-sub').textContent = state.round ? `${sc.work.length} dias de trabalho · vida além do trabalho` : `${sc.work.length} dias de trabalho · ${st.work}h`;
-    $('score').textContent = String(st.count);
-    $('score-total').textContent = `/${N()}`;
-    $('list-count').textContent = `${N()} coisas · ${items().reduce((n, it) => n + it.hours, 0)}h`;
+    $('week-sub').textContent = `${sc.work.length} dias de trabalho · ${s.work}h · sobram ${s.free}h`;
+    const surviveDone = survivalItems().reduce((n, it) => n + Math.min(E.placedCount(week(), it), it.times), 0);
+    const surviveTotal = survivalItems().reduce((n, it) => n + it.times, 0);
+    $('score').textContent = String(s.liveCount);
+    $('score-total').textContent = `/${s.liveTotal}`;
+    $('survive-count').textContent = `${surviveDone}/${surviveTotal}`;
+    $('live-count').textContent = liveLocked() ? '🔒' : `${s.liveCount}/${s.liveTotal}`;
+    $('tab-survive').setAttribute('aria-selected', String(tab === 'survive'));
+    $('tab-live').setAttribute('aria-selected', String(tab === 'live'));
+    $('tab-live').classList.toggle('locked', liveLocked());
     $('undo-button').disabled = history.length === 0;
     renderClock();
-    const add = state.round === 0 ? '<button class="chip add-chip" id="add-chip" aria-label="Pôr mais coisas na lista"><span class="emoji" aria-hidden="true">＋</span><span class="name short">Mais coisas</span><span class="name full">Pôr mais coisas na lista</span></button>' : '';
-    $('tray').innerHTML = add + items().map(it => {
-      const p = week().plans.find(x => x.uid === it.uid);
-      const where = p ? `${E.DAYS[p.day]}, ${range(p.start, p.start + it.hours)}` : 'fora da semana';
-      return `<button class="chip${p ? ' placed' : ''}" data-task="${it.uid}" style="--c: var(--plan-${it.color})" aria-pressed="${selected === it.uid}" aria-label="${it.name}, ${it.hours} horas, ${where}">` +
-        `<span class="emoji" aria-hidden="true">${it.emoji}</span><span class="name short">${it.short}</span><span class="name full">${it.name}</span>` +
-        `<span class="meta">${p ? `<span class="tick">✓ </span>${E.SHORT_DAYS[p.day]}<span class="hour"> ${p.start}h</span>` : `${it.hours}h`}</span></button>`;
-    }).join('');
+    const add = tab === 'live' && state.round === 0 && !liveLocked() ? '<button class="chip add-chip" id="add-chip" aria-label="Pôr mais coisas na lista"><span class="emoji" aria-hidden="true">＋</span><span class="name short">Mais coisas</span><span class="name full">Pôr mais coisas na lista</span></button>' : '';
+    $('tray').innerHTML = add + (tab === 'survive' ? survivalItems() : liveItems()).map(chipHTML).join('');
     renderPicker(); renderAccessible();
     say(statusText || firstHint(), statusTone, false);
     drawBoard();
@@ -477,74 +560,88 @@
     const span = spanOf(selected), cur = placedOf(selected);
     const slots = E.runStarts(state.round, week(), items(), selected);
     picker.style.setProperty('--c', work ? 'var(--work)' : `var(--plan-${it.color})`);
-    let title = work ? `Trabalho · ${E.workHoursOf(state.round, selected) + cur.extra}h` : it.name;
-    let tools = '';
+    let title = '', emoji = '', tools = '';
     if (work) {
-      tools = `<button class="tool" data-work="extra-" aria-label="Menos hora extra">− 1h</button><button class="tool" data-work="extra+" aria-label="Mais uma hora extra">+ 1h extra</button>` +
-        (cur.lunch
-          ? `<button class="tool" data-work="lunch-off">Tirar almoço</button><button class="tool" data-work="lunch-" aria-label="Almoço mais cedo">◀ Almoço</button><button class="tool" data-work="lunch+" aria-label="Almoço mais tarde">Almoço ▶</button>`
-          : `<button class="tool" data-work="lunch-on">Pôr almoço</button>`);
+      const h = E.workHoursOf(state.round, selected);
+      if (part === 'tin' || part === 'tout') {
+        const k = part, n = cur[k];
+        emoji = '🚌'; title = `Transporte de ${k === 'tin' ? 'ida' : 'volta'} · ${n}h`;
+        tools = `<button class="tool${n === 1 ? ' on' : ''}" data-work="${k}1">1h</button><button class="tool${n === 2 ? ' on' : ''}" data-work="${k}2">2h</button>` +
+          `<button class="tool" data-work="all1">Todos os dias: 1h</button><button class="tool" data-work="all2">Todos os dias: 2h</button>`;
+      } else if (part === 'lunch' && cur.lunch) {
+        emoji = '🍽️'; title = `Almoço · ${cur.lunchLen}h`;
+        tools = `<button class="tool" data-work="lunch-" aria-label="Almoço mais cedo">◀ Mais cedo</button><button class="tool" data-work="lunch+" aria-label="Almoço mais tarde">Mais tarde ▶</button>` +
+          `<button class="tool${cur.lunchLen === 1 ? ' on' : ''}" data-work="len1">1h</button><button class="tool${cur.lunchLen === 2 ? ' on' : ''}" data-work="len2">2h</button><button class="tool" data-work="lunch-off">Tirar almoço</button>`;
+      } else {
+        emoji = '💼'; title = `Trabalho · ${h + cur.extra}h${cur.extra ? ` (${cur.extra}h extra)` : ''}`;
+        tools = `<button class="tool" data-work="extra-" aria-label="Menos hora extra">− 1h</button><button class="tool" data-work="extra+" aria-label="Mais uma hora extra">+ 1h extra</button>` +
+          (cur.lunch ? '' : '<button class="tool" data-work="lunch-on">Pôr almoço</button>');
+      }
+    } else {
+      emoji = it.emoji;
+      const k = Number(selected.split('.')[1]) + 1;
+      title = it.times > 1 ? `${it.name} · ${k} de ${it.times}` : it.name;
     }
-    picker.innerHTML = `<div class="picker-head"><span class="emoji" aria-hidden="true">${work ? '💼' : it.emoji}</span><b>${title}</b><span class="plan-hours">${span}h</span><span class="spacer"></span>` +
+    picker.innerHTML = `<div class="picker-head"><span class="emoji" aria-hidden="true">${emoji}</span><b>${title}</b><span class="plan-hours">${work ? 'dia: ' : ''}${span}h</span><span class="spacer"></span>` +
       `<button class="picker-close" data-close-picker aria-label="Fechar">×</button></div>` +
       `<div class="slots" role="group" aria-label="${work ? 'Mexer no dia de trabalho' : 'Espaços livres'}">` + tools +
       (!work && cur ? `<button class="remove-button" data-remove="${selected}">Tirar da semana</button>` : '') +
-      slots.map(o => `<button class="slot${cur && cur.day === o.day && cur.start === o.start ? ' current' : ''}" data-day="${o.day}" data-start="${o.start}" aria-label="${E.DAYS[o.day]}, das ${o.start} às ${o.start + span} horas">${E.SHORT_DAYS[o.day]} ${range(o.start, o.start + span)}</button>`).join('') +
+      slots.map(o => `<button class="slot${cur && cur.day === o.day && cur.start === o.start ? ' current' : ''}" data-day="${o.day}" data-start="${o.start}" aria-label="${work ? 'Mover o dia para ' : ''}${E.DAYS[o.day]}, das ${o.start} às ${o.start + span} horas">${E.SHORT_DAYS[o.day]} ${range(o.start, o.start + span)}</button>`).join('') +
       (!slots.length && !cur ? '<p class="no-room">Libere espaço: toque em algo encaixado para mover ou tirar.</p>' : '') +
-      (!work && state.round === 0 ? `<button class="remove-button ghost" data-delete="${selected}">Excluir da lista</button>` : '') +
+      (!work && it.kind === 'live' && state.round === 0 ? `<button class="remove-button ghost" data-delete="${it.uid}">Excluir da lista</button>` : '') +
       '</div>';
   }
   function renderAccessible() {
     const all = E.blocks(state.round, week(), items()).map(b => ({ ...b, text: b.kind === 'plan' ? `${E.itemOf(items(), b.uid).name} (plano)` : { work: 'trabalho', commute: 'transporte', lunch: 'almoço' }[b.kind] }));
-    $('accessible-board').innerHTML = `<h2>Agenda da semana ${E.SCENARIOS[state.round].scale}</h2>` + E.DAYS.map((name, d) => {
+    $('accessible-board').innerHTML = `<h2>Agenda da semana ${scaleOf(state.round)}</h2>` + E.DAYS.map((name, d) => {
       const list = all.filter(b => b.day === d).sort((a, b) => a.start - b.start).map(b => `${range(b.start, b.end)} ${b.text.toLowerCase()}`);
-      return `<p>${name}: ${list.length ? list.join('; ') : 'livre'}; 23h–7h sono.</p>`;
+      return `<p>${name}, ${E.DATES[d]} de outubro: ${list.length ? list.join('; ') : 'livre'}; 23h–6h sono.</p>`;
     }).join('');
-    board.setAttribute('aria-label', `Calendário da semana ${E.SCENARIOS[state.round].scale}: ${E.stats(state.round, week(), items()).count} de ${N()} planos encaixados. A agenda em texto vem logo depois.`);
+    const s = st();
+    board.setAttribute('aria-label', `Agenda da semana ${scaleOf(state.round)}: ${s.survivalDone ? 'tudo pra sobreviver encaixado' : 'falta o que é pra sobreviver'}, ${s.rest}h de descanso, ${s.liveCount} de ${s.liveTotal} planos pra viver. A agenda em texto vem logo depois.`);
   }
   function renderCatalog() {
     const has = new Set(items().map(it => it.uid));
-    $('catalog').innerHTML = E.GROUPS.map(group => `<h3>${group}</h3><div class="cat-row">` + E.CATALOG.filter(c => c.group === group).map(c =>
+    $('catalog').innerHTML = E.GROUPS.map(group => `<h3>${group}</h3><div class="cat-row">` + E.LIVING.filter(c => c.group === group).map(c =>
       `<button class="cat-chip" data-cat="${c.id}" aria-pressed="${has.has(c.id)}" style="--c: var(--plan-${c.color})"><span aria-hidden="true">${c.emoji}</span> ${c.name} <small>${c.hours}h</small></button>`).join('') + '</div>').join('') +
-      (items().some(it => !it.ref) ? `<h3>Seus itens</h3><div class="cat-row">${items().filter(it => !it.ref).map(it =>
+      (liveItems().some(it => !it.ref) ? `<h3>Seus itens</h3><div class="cat-row">${liveItems().filter(it => !it.ref).map(it =>
         `<button class="cat-chip" data-cat="${it.uid}" aria-pressed="true" style="--c: var(--plan-${it.color})"><span aria-hidden="true">${it.emoji}</span> ${it.name} <small>${it.hours}h</small></button>`).join('')}</div>` : '');
-    $('catalog-count').textContent = `${N()} na lista · ${items().reduce((n, it) => n + it.hours, 0)}h`;
+    $('catalog-count').textContent = `${liveItems().length} na lista pra viver · ${liveItems().reduce((n, it) => n + it.hours, 0)}h`;
   }
   function drawThumb(id, round) {
     const c = $(id); if (!c || !c.getBoundingClientRect().width || !state.weeks[round]) return;
     const { g, W, H } = fitCanvas(c);
     paintWeek(g, W, H, round, state.weeks[round], items(), { headerH: Math.max(14, W / 16), letters: true, dayFont: Math.max(8, W / 26), emoji: 16, scale: 1 });
-    c.setAttribute('aria-label', `Semana ${E.SCENARIOS[round].scale}: ${state.weeks[round].plans.map(p => `${E.itemOf(items(), p.uid).name}, ${E.DAYS[p.day].toLowerCase()} ${p.start}h`).join('; ') || 'nenhum plano'}.`);
+    c.setAttribute('aria-label', `Semana ${scaleOf(round)}: ${state.weeks[round].plans.map(p => `${E.itemOf(items(), p.uid).name}, ${E.DAYS[p.day].toLowerCase()} ${p.start}h`).join('; ') || 'nenhum plano'}.`);
   }
-  const leftList = round => items().filter(it => !state.weeks[round].plans.some(p => p.uid === it.uid)).map(itemLabel).join(' · ');
+  const shortVerdict = v => (v.code === 'survival' ? 'não deu pra sobreviver' : v.code === 'rest' ? 'sem descanso' : v.code === 'live' ? `viveu ${v.stats.liveCount} de ${v.stats.liveTotal}` : 'coube tudo');
   function renderResults() {
-    const a = E.stats(0, state.weeks[0], items()), b = E.stats(1, state.weeks[1], items());
-    const max0 = E.maxPlans(0, items()), max1 = E.maxPlans(1, items());
-    $('results-title').innerHTML = `Com ${who(0)}, coube ${a.count}.<br>Com ${who(1)}, coube ${b.count}.`;
-    $('score-0').innerHTML = `${a.count}/${N()}<small>coube</small>`;
-    $('score-1').innerHTML = `${b.count}/${N()}<small>coube</small>`;
+    const v0 = E.verdict(0, state.weeks[0], items()), v1 = E.verdict(1, state.weeks[1], items());
+    const a = v0.stats, b = v1.stats, max0 = E.maxPlans(0, items()), max1 = E.maxPlans(1, items());
+    $('results-title').innerHTML = `Na 6×1, ${shortVerdict(v0)}.<br>Na 5×2, ${shortVerdict(v1)}.`;
+    $('score-0').innerHTML = `${a.liveCount}/${a.liveTotal}<small>${a.survivalDone ? 'pra viver' : 'faltou o básico'}</small>`;
+    $('score-1').innerHTML = `${b.liveCount}/${b.liveTotal}<small>${b.survivalDone ? 'pra viver' : 'faltou o básico'}</small>`;
     const lines = [];
-    if (a.left.length) lines.push(`<b>Com ${who(0)}, ficou de fora:</b> ${leftList(0)}`);
-    if (b.left.length) lines.push(`<b>Com ${who(1)}, ainda ficou de fora:</b> ${leftList(1)}`);
+    const left = l => `${l.length > 1 ? 'ficaram' : 'ficou'} de fora:</b> ${l.map(uid => itemLabel(E.itemOf(items(), uid))).join(' · ')}`;
+    if (a.liveLeft.length) lines.push(`<b>Na 6×1, ${left(a.liveLeft)}`);
+    if (b.liveLeft.length) lines.push(`<b>Na 5×2, ainda ${left(b.liveLeft)}`);
     $('results-left').innerHTML = lines.join('<br>');
     let insight;
-    if (max0 < N()) {
-      insight = `Com a sua lista, na 6×1 cabem no máximo ${max0} de ${N()}, mesmo mexendo no horário do trabalho e sem relógio.`;
-      insight += max1 === N() ? ' Na 5×2, cabe tudo. Não é falta de organização. É falta de tempo.' : ` Na 5×2, cabem ${max1}. Não é falta de organização. É falta de tempo.`;
-    } else {
-      insight = `Sua lista cabe nas duas semanas. Mas na 6×1 sobra menos: ${a.free}h livres contra ${b.free}h na 5×2, e só um dia inteiro de folga.`;
-    }
-    if (a.extra) insight += ` E você ainda fez ${a.extra}h de hora extra na 6×1.`;
+    if (max0 < 0) insight = 'Com a sua lista, na 6×1 nem o básico cabe, mesmo mexendo no trabalho.';
+    else if (max0 < a.liveTotal) insight = `Com a sua lista, mesmo mexendo no trabalho e sem relógio, na 6×1 dá pra sobreviver e viver no máximo ${max0} de ${a.liveTotal}.`;
+    else insight = `Sua lista cabe na 6×1, no limite: sobram ${a.free}h livres contra ${b.free}h na 5×2.`;
+    insight += max1 >= b.liveTotal ? ' Na 5×2, cabe tudo. Não é falta de organização. É falta de tempo.' : ` Na 5×2, ${max1} de ${b.liveTotal}.`;
     $('results-insight').textContent = insight;
+    $('results-flavio').innerHTML = flavioHTML();
+    $('results-flavio').hidden = !C_.flavio;
     const gain = b.free - a.free;
     $('gain-hours').textContent = `${gain >= 0 ? '+' : ''}${gain}h`;
-    $('gain-text').textContent = `de vida além do trabalho por semana na 5×2, do jeito que você montou. E um dia inteiro a mais de folga.`;
+    $('gain-text').textContent = 'de vida além do trabalho por semana na 5×2, do jeito que você montou. E um dia inteiro a mais de folga.';
     drawThumb('thumb-0', 0); drawThumb('thumb-1', 1);
     prepareShare();
   }
   function focusHeading() {
-    const target = { playing: 'week-title', gameover: 'week-title', results: 'results-title' }[state.mode];
-    const el = $(target); el.tabIndex = -1; el.focus({ preventScroll: true });
+    const el = $(state.mode === 'results' ? 'results-title' : 'week-title'); el.tabIndex = -1; el.focus({ preventScroll: true });
     window.scrollTo(0, 0);
   }
 
@@ -554,7 +651,6 @@
     const local = !host || host === 'localhost' || /^(127\.|10\.|192\.168\.)/.test(host) || host.endsWith('.local');
     return /^https?:$/.test(location.protocol) && !local ? location.origin + location.pathname.replace(/index\.html$/, '') : E.SITE_URL;
   }
-  // Quebra por item (emoji e nome ficam juntos).
   function wrapItems(g, list, sep, maxWidth) {
     const lines = [];
     let line = '';
@@ -576,9 +672,8 @@
   function fitFont(g, text, size, maxWidth, family) {
     while (size > 20) { g.font = `${size}px ${family}`; if (g.measureText(text).width <= maxWidth) break; size -= 4; }
   }
-  // Painel de uma semana, com a identidade do candidato no cabeçalho.
   function sharePanel(g, round, x, y, w, boardH) {
-    const C = theme(), wk = C.week[round], n = E.stats(round, state.weeks[round], items()).count, headH = 104, h = headH + boardH + 124;
+    const C = theme(), wk = C.week[round], v = E.verdict(round, state.weeks[round], items()), headH = 104, h = headH + boardH + 124;
     g.save(); g.translate(x, y);
     g.fillStyle = C.card; rr(g, 0, 0, w, h, 20); g.fill();
     g.save(); rr(g, 0, 0, w, h, 20); g.clip();
@@ -587,19 +682,20 @@
     if (!round) { g.fillStyle = C.navy; g.fillRect(0, headH + 10, w, 7); }
     let tx = 24;
     if (round) { g.fillStyle = wk.on; drawStar(g, 52, headH / 2 + 2, 26); tx = 92; }
-    const name = who(round).toUpperCase();
-    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-    fitFont(g, name, 76, w - tx - 130, DISPLAY);
-    g.fillStyle = round ? wk.deep : C.navy; g.fillText(name, tx + 5, 87);
-    g.fillStyle = round ? wk.on : C.yellow; g.fillText(name, tx, 82);
-    g.font = `52px ${DISPLAY}`; g.textAlign = 'right'; g.fillStyle = wk.on;
-    g.fillText(E.SCENARIOS[round].scale, w - 24, 80);
+    const name = scaleOf(round);
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.font = `80px ${DISPLAY}`;
+    g.fillStyle = round ? wk.deep : C.navy; g.fillText(name, tx + 5, 89);
+    g.fillStyle = round ? wk.on : C.yellow; g.fillText(name, tx, 84);
+    g.font = `800 24px ${SANS}`; g.textAlign = 'right'; g.fillStyle = wk.on;
+    g.fillText(round ? 'VIDA ALÉM DO TRABALHO' : 'COM FLÁVIO', w - 24, 62);
     g.restore();
     g.save(); g.translate(14, headH + 32);
     paintWeek(g, w - 28, boardH, round, state.weeks[round], items(), { hours: true, gutter: 44, headerH: 40, scale: 2.1, emoji: 15, dayFont: 9.5, letters: true });
     g.restore();
-    g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = C.ink; g.font = `68px ${DISPLAY}`;
-    g.fillText(`COUBE ${n}/${N()}`, w / 2, headH + boardH + 106);
+    const foot = v.code === 'survival' ? 'NÃO DEU PRA SOBREVIVER' : v.code === 'rest' ? 'SEM DESCANSO' : v.code === 'live' ? `VIVI ${v.stats.liveCount}/${v.stats.liveTotal}` : 'COUBE TUDO';
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = C.ink;
+    fitFont(g, foot, 64, w - 40, DISPLAY);
+    g.fillText(foot, w / 2, headH + boardH + 106);
     g.restore();
     return h;
   }
@@ -618,22 +714,20 @@
     g.fillStyle = C.muted; g.font = `700 30px ${SANS}`; g.textAlign = 'right'; g.fillText('VIDA ALÉM DO TRABALHO', W - 80, 272);
     g.fillStyle = C.ink; g.textAlign = 'left'; g.font = `96px ${DISPLAY}`;
     g.fillText('MINHA SEMANA', 80, 416);
-    const second = `COM ${who(0)} E COM ${who(1)}`.toUpperCase();
-    fitFont(g, second, 96, W - 160, DISPLAY);
-    g.fillText(second, 80, 540);
+    fitFont(g, 'NA 6×1 E NA 5×2', 96, W - 160, DISPLAY);
+    g.fillText('NA 6×1 E NA 5×2', 80, 540);
     const panelY = 574, boardH = 560;
     const panelH = Math.max(sharePanel(g, 0, 70, panelY, 452, boardH), sharePanel(g, 1, W - 70 - 452, panelY, 452, boardH));
     let y = panelY + panelH + 72;
-    const left = items().filter(it => !state.weeks[0].plans.some(p => p.uid === it.uid));
+    const v0 = E.verdict(0, state.weeks[0], items());
+    const left = v0.code === 'survival' ? v0.stats.missing.map(x => x.item) : liveItems().filter(it => v0.stats.liveLeft.includes(it.uid));
     g.textAlign = 'left'; g.textBaseline = 'alphabetic';
     if (left.length) {
-      g.fillStyle = C.muted; g.font = `800 30px ${SANS}`; g.fillText(`COM ${who(0).toUpperCase()}, FICOU DE FORA:`, 80, y);
+      g.fillStyle = C.muted; g.font = `800 30px ${SANS}`; g.fillText(v0.code === 'survival' ? 'NA 6×1, FALTOU O BÁSICO:' : 'NA 6×1, FICOU DE FORA:', 80, y);
       g.fillStyle = C.ink; g.font = `700 40px ${SANS}, ${EMOJI}`;
-      let lines = wrapItems(g, left.map(itemLabel), '  ·  ', W - 160);
+      let lines = wrapItems(g, left.map(it => `${it.emoji} ${it.short}`), '  ·  ', W - 160);
       if (lines.length > 2) lines = wrapItems(g, left.map(it => it.emoji), '  ', W - 160);
       for (const line of lines.slice(0, 2)) { y += 54; g.fillText(line, 80, y); }
-    } else {
-      g.fillStyle = C.ink; g.font = `800 40px ${SANS}`; g.fillText(`COM ${who(0).toUpperCase()}, COUBE TUDO. NO LIMITE.`, 80, y);
     }
     const ctaY = Math.max(y + 42, 1500);
     g.fillStyle = C.ink; rr(g, 70, ctaY, W - 140, 150, 22); g.fill();
@@ -676,7 +770,6 @@
   // ---------- Diálogos ----------
   function openDialog(id) { const d = $(id); if (!d.open) d.showModal(); }
   function closeDialog(d) { if (d && d.open) d.close(); }
-  function closeAllDialogs() { document.querySelectorAll('dialog[open]').forEach(d => d.close()); }
 
   // ---------- Eventos ----------
   $('about-button').addEventListener('click', () => openDialog('about-dialog'));
@@ -693,36 +786,38 @@
     const r = d.getBoundingClientRect();
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closeDialog(d);
   }));
-  // O game over não fecha com Esc: a pergunta precisa de resposta.
+  // O game over não fecha com Esc: é preciso escolher o que fazer.
   $('gameover-dialog').addEventListener('cancel', e => e.preventDefault());
+  document.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.tab === 'live' && liveLocked()) { say(`Primeiro, o que é pra sobreviver. ${missingText()}`, 'error'); return; }
+    tab = b.dataset.tab; selected = null; part = null; renderGame();
+  }));
 
   $('tray').addEventListener('click', e => {
     if (e.target.closest('#add-chip')) { renderCatalog(); openDialog('add-dialog'); return; }
     const chip = e.target.closest('[data-task]');
     if (!chip) return;
     if (suppressClick) { suppressClick = false; return; }
-    const uid = chip.dataset.task;
-    if (selected === uid) { deselect(); document.querySelector(`[data-task="${uid}"]`)?.focus({ preventScroll: true }); }
-    else select(uid, e.detail === 0);
+    chipFor(E.itemOf(items(), chip.dataset.task));
+    if (e.detail === 0 && selected) { const p = $('picker'); (p.querySelector('.slot') || p.querySelector('.picker-close'))?.focus(); }
   });
   $('picker').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.start !== undefined) {
       const uid = selected;
       if (place(uid, Number(b.dataset.day), Number(b.dataset.start)) && e.detail === 0) {
-        const next = items().find(it => !week().plans.some(p => p.uid === it.uid));
-        document.querySelector(`[data-task="${next ? next.uid : uid}"]`)?.focus({ preventScroll: true });
+        (selected ? $('picker').querySelector('.slot') : null)?.focus() || document.querySelector(`[data-task="${E.baseOf(uid)}"]`)?.focus({ preventScroll: true });
       }
     } else if (b.dataset.work) {
-      const change = { 'extra+': { extra: 1 }, 'extra-': { extra: -1 }, 'lunch-off': { lunch: false }, 'lunch-on': { lunch: true }, 'lunch-': { lunchAt: -1 }, 'lunch+': { lunchAt: 1 } }[b.dataset.work];
-      editWork(change);
-      document.querySelector(`[data-work="${b.dataset.work}"]`)?.focus({ preventScroll: true });
+      const key = b.dataset.work;
+      const changes = { 'extra+': { extra: 1 }, 'extra-': { extra: -1 }, 'lunch-off': { lunch: false }, 'lunch-on': { lunch: true }, 'lunch-': { lunchAt: -1 },
+        'lunch+': { lunchAt: 1 }, len1: { lunchLen: 1 }, len2: { lunchLen: 2 }, tin1: { tin: 1 }, tin2: { tin: 2 }, tout1: { tout: 1 }, tout2: { tout: 2 } };
+      if (key === 'all1' || key === 'all2') editWork({ tin: Number(key.slice(3)), tout: Number(key.slice(3)) }, true);
+      else editWork(changes[key]);
+      document.querySelector(`[data-work="${key}"]`)?.focus({ preventScroll: true });
     } else if (b.dataset.remove) removePlan(b.dataset.remove);
     else if (b.dataset.delete) deleteItem(b.dataset.delete);
-    else if (b.dataset.closePicker !== undefined) {
-      const uid = deselect();
-      document.querySelector(`[data-task="${uid}"]`)?.focus({ preventScroll: true });
-    }
+    else if (b.dataset.closePicker !== undefined) deselect();
   });
   $('catalog').addEventListener('click', e => {
     const b = e.target.closest('[data-cat]'); if (!b) return;
@@ -738,19 +833,20 @@
     state.nextId += 1;
     if (addItem(it)) { $('custom-name').value = ''; $('custom-status').textContent = `${itemLabel(it)} entrou na lista.`; }
   });
-  $('go-yes').addEventListener('click', () => answer(true));
-  $('go-no').addEventListener('click', () => answer(false));
   $('go-again').addEventListener('click', againSixOne);
-  $('go-lula').addEventListener('click', toLula);
+  $('go-52').addEventListener('click', toFiveTwo);
 
-  // Arrastar (mouse e toque): da lista para o calendário, ou algo já encaixado (inclusive o trabalho).
+  // Arrastar (mouse e toque): da lista para a agenda, ou algo já encaixado (inclusive o trabalho).
   function beginPointer(e, source, id) {
     pointer = { source, id, x0: e.clientX, y0: e.clientY, moved: false, pointerId: e.pointerId, touch: e.pointerType !== 'mouse' };
   }
   $('tray').addEventListener('pointerdown', e => {
     const chip = e.target.closest('[data-task]');
     if (!chip || e.button > 0 || state.mode !== 'playing') return;
-    beginPointer(e, 'chip', chip.dataset.task);
+    const it = E.itemOf(items(), chip.dataset.task);
+    if (it.kind === 'live' && liveLocked()) return;
+    const id = E.nextInstance(week(), it) || week().plans.filter(p => E.baseOf(p.uid) === it.uid).map(p => p.uid).pop();
+    beginPointer(e, 'chip', id);
   });
   board.addEventListener('pointerdown', e => {
     if (e.button > 0 || state.mode !== 'playing' || document.querySelector('dialog[open]')) return;
@@ -768,14 +864,14 @@
     if (!pointer.moved) {
       const dx = e.clientX - pointer.x0, dy = e.clientY - pointer.y0;
       if (!pointer.id || Math.hypot(dx, dy) < 8) return;
-      // Na lista, arrastar para o lado rola a lista; para cima, leva o plano ao calendário.
+      // Na lista, arrastar para o lado rola a lista; para cima, leva o plano à agenda.
       if (pointer.source === 'chip' && pointer.touch && Math.abs(dx) > Math.abs(dy)) { pointer = null; return; }
       pointer.moved = true;
       const ghost = $('drag-ghost');
       if (E.isWork(pointer.id)) { ghost.textContent = '💼 Dia de trabalho'; ghost.style.setProperty('--c', 'var(--work-ink)'); }
       else { const it = E.itemOf(items(), pointer.id); ghost.textContent = `${it.emoji} ${it.short} · ${it.hours}h`; ghost.style.setProperty('--c', `var(--plan-${it.color})`); }
       ghost.hidden = false;
-      document.querySelector(`[data-task="${pointer.id}"]`)?.classList.add('dragging');
+      document.querySelector(`[data-task="${E.baseOf(pointer.id)}"]`)?.classList.add('dragging');
     }
     e.preventDefault();
     const lift = pointer.touch ? 54 : 0;
@@ -821,10 +917,8 @@
   });
   document.addEventListener('keydown', e => {
     if (state.mode !== 'playing' || document.querySelector('dialog[open]')) return;
-    if (e.key === 'Escape' && selected) {
-      const uid = deselect();
-      document.querySelector(`[data-task="${uid}"]`)?.focus({ preventScroll: true });
-    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !/INPUT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); undo(); }
+    if (e.key === 'Escape' && selected) deselect();
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !/INPUT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); undo(); }
   });
   if (typeof ResizeObserver === 'function') new ResizeObserver(() => drawBoard()).observe($('board-wrap'));
   let resizeTimer = 0;
@@ -838,22 +932,22 @@
   lastTick = performance.now();
   setInterval(tick, 250);
 
-  // Ganchos de teste: estado em texto e geometria do calendário (px CSS, origem no canto superior esquerdo do canvas).
+  // Ganchos de teste: estado em texto e geometria da agenda (px CSS, origem no canto superior esquerdo do canvas).
   window.render_game_to_text = () => {
     const rect = board.getBoundingClientRect(), wk = week();
     return JSON.stringify({
-      mode: state.mode, round: state.round, introSeen: state.introSeen, clock: Math.round(state.clock * 10) / 10, scale: E.SCENARIOS[state.round].scale,
-      candidate: who(state.round), selected, dialog: document.querySelector('dialog[open]')?.id || null, status: statusText, statusTone,
+      mode: state.mode, round: state.round, introSeen: state.introSeen, clock: Math.round(state.clock * 10) / 10, scale: scaleOf(state.round),
+      tab, selected, part, dialog: document.querySelector('dialog[open]')?.id || null, status: statusText, statusTone,
       storageAvailable: storageOK, historyLength: history.length,
-      items: items().map(it => ({ uid: it.uid, name: it.name, hours: it.hours, custom: !it.ref })),
+      items: items().map(it => ({ uid: it.uid, name: it.name, hours: it.hours, times: it.times, kind: it.kind, custom: !it.ref })),
       week: wk, weeks: state.weeks, stats: [0, 1].map(r => (state.weeks[r] ? E.stats(r, state.weeks[r], items()) : null)),
+      verdict: [0, 1].map(r => (state.weeks[r] ? E.verdict(r, state.weeks[r], items()).code : null)),
       maxPlans: [E.maxPlans(0, items()), E.maxPlans(1, items())],
       options: selected && wk ? E.allOptions(state.round, wk, items(), selected) : [],
       board: geo && state.mode !== 'results' ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, firstHour: FIRST, ...geo } : null,
       share: { text: share.text, whatsapp: $('share-whatsapp').getAttribute('href'), imageBytes: share.size || 0, nativeShare: !$('share-native').hidden }
     });
   };
-  // Avança o relógio da semana (para testes e para o cliente de automação).
   window.advanceTime = ms => { spend((ms || 0) / 1000); drawBoard(); return Promise.resolve(); };
 
   render();

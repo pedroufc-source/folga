@@ -1,64 +1,105 @@
 # Referências e premissas do FOLGA
 
-Atualizado em 8/10/2026. Só as cargas semanais e as posições dos candidatos vêm de fontes. O resto é escolha do jogo, e o diálogo "Como funciona" diz isso.
+Atualizado em 8/10/2026. Os relatos, a posição de Flávio, os limites legais e os números de base vêm de fontes abertas e lidas. O resto é escolha do jogo, e o diálogo "Como funciona" diz isso.
 
-## Fontes
+## Flávio e as propostas
 
-### 1. Lula — Folha de Pernambuco, 28/5/2026
-- ["Fim da escala 6x1 é 'conquista civilizatória', diz Lula"](https://www.folhape.com.br/economia/fim-da-escala-6x1-e/490321/).
-- Uso: Lula chamou a aprovação na Câmara de "uma conquista histórica e civilizatória" e de "um compromisso assumido pelo Governo do Brasil", e disse que o governo vai trabalhar pela aprovação no Senado.
+### 1. InfoMoney, 19/5/2026
+- ["Flávio critica PEC do fim da escala 6×1: 'Vai gerar desemprego em massa'"](https://www.infomoney.com.br/?p=3338054).
+- Uso: Flávio disse que a PEC "vai gerar desemprego em massa, vai gerar aumento do custo de vida", numa reunião com parlamentares do PL, e propôs no lugar jornada flexível com pagamento por hora trabalhada. É a base da frase do game over e do resultado ("Flávio criticou a PEC do fim da 6×1…").
 
-### 2. Flávio — Folhapress/Diário do Comércio, 6/10/2026
-- [Reportagem da Folhapress publicada pelo Diário do Comércio](https://diariodocomercio.com.br/politica/flavio-bolsonaro-fim-6x1/).
-- Uso: Flávio chamou a discussão de oportunista ("Lula, em quatro anos de governo, não fez"), defendeu a proposta do PL de que o trabalhador "monte a sua jornada de trabalho" e receba por hora, e "tem evitado responder se vai votar contra ou a favor da proposta do governo".
-- Limite: **não escrever que ele votou contra**. A fonte registra que ele evita dizer o voto. O jogo do FLÁVIO usa ainda uma entrevista à Record/R7 de 30/8/2026 com o mesmo teor; ela não foi reaberta nesta revisão e não é citada aqui.
+### 2. Senado: PEC 12/2026
+- [Página da matéria](https://www25.senado.leg.br/web/atividade/materias/-/materia/174362), aberta em 8/10/2026.
+- Uso: o primeiro signatário é Rogerio Marinho (PL-RN), e Flávio Bolsonaro (PL-RJ) está entre os autores. A ementa prevê que o empregado opte entre o regime comum da CLT e um regime flexível baseado em horas trabalhadas. Situação na página: na CCJ, aguardando relator.
 
-### 3. PEC 12/2026 — Jornal de Brasília, 7/10/2026
-- ["Entenda as propostas pelo fim da escala 6x1 de Flávio Bolsonaro e Lula"](https://jornaldebrasilia.com.br/noticias/economia/entenda-as-propostas-pelo-fim-da-escala-6x1-de-flavio-bolsonaro-e-lula/).
-- Uso: a PEC 12, apresentada em maio pelo senador Rogério Marinho (PL-RN) e apoiada por Flávio, permite escolher entre a CLT e "o trabalho por hora, por meio de um regime flexível", e nela "o contrato individual de trabalho poderá valer mais do que os instrumentos de negociação coletiva". Os limites de 8h diárias e 44h semanais continuam.
-- Limite: **as fontes divergem sobre se a PEC 12 mantém a 6×1.** O Jornal de Brasília diz que ela "também pretende acabar com a escala 6×1, mas de forma diferente"; resultados de busca citam reportagens que dizem o contrário, mas elas não foram abertas nesta revisão. O jogo não afirma nenhuma das duas coisas, nem que a PEC 12 acabaria com o intervalo de almoço. O aviso da CLT só põe os dois fatos lado a lado.
+### 3. Folhapress/Diário do Comércio, 6/10/2026
+- [Reportagem](https://diariodocomercio.com.br/politica/flavio-bolsonaro-fim-6x1/).
+- Uso: Flávio "tem evitado responder se vai votar contra ou a favor da proposta do governo".
+- Limite: **não escrever que ele votou contra**. Fora do "Como funciona", o jogo não fala do voto dele, porque a votação no Senado pode acontecer a qualquer momento.
 
-### 4. CLT — Planalto
-- [Decreto-Lei 5.452/1943](https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm), texto conferido em 8/10/2026.
-- Art. 71: "Em qualquer trabalho contínuo, cuja duração exceda de 6 (seis) horas, é obrigatória a concessão de um intervalo para repouso ou alimentação, o qual será, no mínimo, de 1 (uma) hora". Uso: o jogo barra trechos de trabalho acima de 6h seguidas.
-- Art. 59: a jornada "poderá ser acrescida de horas extras, em número não excedente de duas". Uso: hora extra até 2h por dia.
-- Limite: desde a reforma de 2017, convenção ou acordo coletivo pode reduzir o intervalo, "respeitado o limite mínimo de trinta minutos para jornadas superiores a seis horas" (art. 611-A, III). O jogo simplifica para 1h.
+### 4. Jornal de Brasília, 7/10/2026
+- ["Entenda as propostas pelo fim da escala 6x1…"](https://jornaldebrasilia.com.br/noticias/economia/entenda-as-propostas-pelo-fim-da-escala-6x1-de-flavio-bolsonaro-e-lula/).
+- Uso: na PEC 12, "o contrato individual de trabalho poderá valer mais do que os instrumentos de negociação coletiva". Aparece no aviso da CLT.
+- Limite: **as fontes divergem sobre se a PEC 12 mantém a 6×1.** O jogo não afirma nenhuma das duas coisas.
 
-### 5. Vida Além do Trabalho
-- [Brasil de Fato, 27/5/2026](https://www.brasildefato.com.br/2026/05/27/rick-azevedo-idealizador-do-movimento-pelo-fim-da-escala-6x1-lanca-pre-candidatura-a-deputado-federal/): Rick Azevedo, vereador do Rio pelo PSOL e criador do Movimento VAT – Vida Além do Trabalho, foi balconista de farmácia por 12 anos na 6×1; em 2023 publicou o vídeo, sobre não ter tempo para estudar nem para o lazer, que deu origem ao movimento.
-- [CNN Brasil, 5/10/2026](https://www.cnnbrasil.com.br/eleicoes/rick-azevedo-e-eleito-deputado-federal-pelo-rio-de-janeiro/): Rick Azevedo (PSOL) foi eleito deputado federal pelo Rio em 4/10/2026, com 191.371 votos.
-- Uso: parágrafo "Vida além do trabalho" no "Como funciona"; a expressão aparece na semana 5×2, no game over e na imagem de compartilhamento.
+## A PEC do fim da 6×1
 
-### 6. Agência Senado, 7/10/2026
+### 5. Agência Senado, 7/10/2026
 - ["PEC do fim da escala 6x1 passa por 2ª sessão de discussão no Plenário"](https://www12.senado.leg.br/noticias/materias/2026/10/07/pec-do-fim-da-escala-6x1-passa-por-2a-sessao-de-discussao-no-plenario).
-- Uso: a PEC 221/2019 "reduz de 44 para 40 horas a duração máxima da jornada semanal de trabalho" e "prevê dois dias de repouso por semana, sem redução salarial". O jogo diz que a PEC **propõe** isso.
-- Situação na data: em discussão em primeiro turno no Plenário do Senado. Precisa de 49 votos em dois turnos. **Reconfira antes de escrever algo sobre aprovação ou vigência.** Por ser emenda constitucional, a PEC é promulgada pelo Congresso, sem sanção do presidente.
+- Uso: a PEC 221/2019 reduz o limite de 44h para 40h semanais, com dois dias de repouso e sem redução salarial. Aprovada na Câmara em 27/5/2026; em discussão no Senado em 8/10/2026. **Reconfira antes de escrever algo sobre aprovação.**
 
-### 7. Constituição Federal, art. 7º, XIII
-- [Planalto: Constituição](https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm).
-- Uso: limite de 8h diárias e 44h semanais.
+### 6. CSB, com informações do g1, 7/10/2026
+- ["Fim da escala 6x1: entenda cada categoria profissional"](https://csb.org.br/noticias/fim-escala-6x1-entenda-cada-categoria-profissional).
+- Uso: "entregadores e motoristas de aplicativo, não estão diretamente submetidos às regras da CLT enquanto não houver vínculo empregatício reconhecido". Por isso o personagem é de carteira assinada, e o "Como funciona" diz que a PEC não muda a jornada de quem trabalha por aplicativo sem vínculo.
 
-### 8. Agência Câmara, 27/5/2026
-- ["Plenário analisa neste momento PEC que acaba com escala 6x1; acompanhe"](https://www.camara.leg.br/noticias/1277073-plenario-analisa-neste-momento-pec-que-acaba-com-escala-6x1-acompanhe).
-- Uso (histórico): o texto na Câmara fixava 40h "em cinco dias, com dois de descanso", sem redução de salário.
+## Quem vive a 6×1
+
+Trechos curtos, sem mudar as palavras.
+
+### 7. Agência Brasil, maio de 2026
+- ["Fim da escala 6x1: mais tempo para descanso e família é prioridade"](https://agenciabrasil.ebc.com.br/economia/noticia/2026-05/fim-da-escala-6x1-mais-tempo-para-descanso-e-familia-e-prioridade).
+- Darlen da Silva, 38 anos, balconista de medicamentos no Rio, há 15 anos na 6×1: "Você tem que optar, ou você larga tudo de lado e vai tentar viver a vida ou você cuida." Uso: game over "Faltou o básico".
+
+### 8. Agência Mural, 4/12/2024
+- ["O relato de três trabalhadores das periferias que estão na escala 6x1"](https://agenciamural.org.br/o-relato-de-tres-trabalhadores-das-periferias-que-estao-na-escala-6x1/).
+- Oliver James Silva de Andrade, 30, supervisor de operações, mora na Cidade Ademar (zona sul de São Paulo), no mínimo 1h20 de trajeto: "Tô tão cansado que troco o dia da minha folga só pra dormir". Uso: game over "Faltou descanso".
+
+### 9. Vídeos (título e canal conferidos pelo oEmbed do YouTube em 8/10/2026)
+- UOL: ["Trabalhadora em escala 6x1 explica por que apoia PEC: 'Quero criar memórias com a minha filha'"](https://www.youtube.com/watch?v=o_Gwm51q69U). Uso: game over "Sobreviveu. Viver, não deu."
+- Rede TVT: ["'Escala 6x1 impediu que eu fosse gente', diz Rick Azevedo"](https://www.youtube.com/shorts/EENOXGUAQsc). Uso: game over "Coube tudo. No limite."
+- BBC News Brasil: ["O balconista de farmácia que semeou no TikTok o fim da escala 6x1"](https://www.youtube.com/shorts/vIx-NqqALIw). Uso: link em todo game over.
+- Brasil de Fato: ["'Sigamos nas ruas! Vamos abolir a escala 6x1', diz Erika Hilton (Psol-SP)"](https://www.youtube.com/watch?v=XwtZEvXRUMg). Uso: link em todo game over.
+
+### 10. Vida Além do Trabalho
+- [Brasil de Fato, 27/5/2026](https://www.brasildefato.com.br/2026/05/27/rick-azevedo-idealizador-do-movimento-pelo-fim-da-escala-6x1-lanca-pre-candidatura-a-deputado-federal/): Rick Azevedo, criador do movimento VAT, foi balconista de farmácia por 12 anos na 6×1.
+- [CNN Brasil, 5/10/2026](https://www.cnnbrasil.com.br/eleicoes/rick-azevedo-e-eleito-deputado-federal-pelo-rio-de-janeiro/): eleito deputado federal pelo Rio em 4/10/2026, com 191.371 votos.
+
+## Números de base
+
+### 11. DIEESE, Nota Técnica 286 (set/2025)
+- [PDF](https://www.dieese.org.br/notatecnica/2025/notaTec286Jornada.pdf).
+- Uso: as 44h costumam ser distribuídas de dois jeitos, "8 horas nos cinco dias úteis e quatro horas de trabalho aos sábados" ou "7 horas e 20 minutos de segunda-feira a sábado". O jogo usa o primeiro.
+
+### 12. Transporte
+- [IBGE, Censo 2022, deslocamentos para o trabalho](https://agenciadenoticias.ibge.gov.br/media/com_mediaibge/arquivos/eb6833eb8d1aa7d4f77b9b38cd20fbdb.pdf) (divulgado em 10/2025): mede só a ida. "1,3 milhão de pessoas levam mais de duas horas para chegar ao trabalho"; a cidade de São Paulo tem 152 mil nessa situação.
+- [Rede Nossa São Paulo/Ipec, Viver em São Paulo: Mobilidade 2024](https://nossasaopaulo.org.br/wp-content/uploads/2019/01/Viver-em-SP-2024_Mobilidade_resumida.pdf): ida e volta da atividade principal, média de 1h38; **1h59** entre quem usa transporte público quase todos os dias.
+- Uso: 1h por trecho é o padrão (perto da média de quem anda de ônibus e metrô em SP); 2h por trecho é a opção para quem mora longe.
+
+### 13. IBGE, PNAD Contínua: outras formas de trabalho 2022
+- [Informativo](https://biblioteca.ibge.gov.br/visualizacao/livros/liv102020_informativo.pdf).
+- Uso: entre as pessoas ocupadas, afazeres domésticos e/ou cuidado de pessoas tomam **11,0h por semana (homens) e 17,8h (mulheres)**. O jogo pede 11h de casa (mercado 2h, faxina 3h, roupa 2h, marmita 2h, contas 2h) mais 1h por dia para cozinhar e comer.
+- Limite: o IBGE não publica horas por tarefa. A divisão é do jogo.
+
+### 14. Sono: CDC
+- [About Sleep](https://www.cdc.gov/sleep/about/index.html): adultos de 18 a 60 anos, "7 or more hours" por noite. O jogo reserva 23h–6h.
+
+### 15. Leis
+- [Constituição, art. 7º](https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm): XIII, "oito horas diárias e quarenta e quatro semanais"; XV, repouso semanal remunerado.
+- [CLT](https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm), conferida em 8/10/2026:
+  - Art. 71: trabalho contínuo acima de 6h exige intervalo de no mínimo 1h e, salvo acordo, no máximo 2h. Uso: o almoço tem 1h ou 2h, e o jogo barra trechos acima de 6h.
+  - Art. 59: até 2h extras por dia.
+  - Art. 58, §2º: o tempo de deslocamento não conta na jornada. O transporte é tempo que o trabalhador perde sem receber.
+  - Limite: o acordo coletivo pode reduzir o intervalo a 30 minutos (art. 611-A, III). O jogo simplifica para 1h.
 
 ## O que é modelo
 
 | Elemento | No jogo | Natureza |
 | --- | --- | --- |
-| A 6×1 é a semana do Flávio; a 5×2, a do Lula; todo mundo vive a 6×1 primeiro | Premissa do jogo | Decisão do dono do projeto, apoiada nas posições acima |
-| Dias de trabalho | 6×1: cinco de 8h e um de 4h; 5×2: cinco de 8h | Distribuição escolhida para chegar a 44h e 40h |
-| Dia de trabalho | 1h de transporte, trabalho, 1h de almoço (nos dias de 8h), trabalho, 1h de transporte | Premissa; o jogador escolhe horário, dia, hora extra (até 2h) e o lugar do almoço, dentro da CLT |
-| Relógio | 2 minutos para montar a semana 6×1; a 5×2 não tem relógio | Desenho de jogo |
-| Sono | 23h–7h, fora do calendário | Premissa |
-| Planos | 13 sugestões iniciais (50h), catálogo com 31 e itens próprios de 1h a 8h | Durações sugeridas pelo jogo |
-| Livre para você | 51h na 6×1 e 57h na 5×2 | Conta das premissas |
-| Máximo possível | Com a lista inicial: 12 de 13 na 6×1, 13 de 13 na 5×2 | Calculado por `maxPlans` (busca exaustiva, mexendo também no trabalho), testado |
+| Semana | 19 a 25 de outubro de 2026; o domingo é o dia do 2º turno | Desenho de jogo |
+| Dia de trabalho | Ida, 8h–12h, almoço, 13h–17h, volta; sábado 8h–12h | Arranjo do DIEESE; os blocos são independentes e o jogador mexe dentro da CLT |
+| Transporte | 1h por trecho; pode ser 2h | Ancorado em SP (Nossa São Paulo, Censo) |
+| Sono | 23h–6h, fora da agenda | Ancorado no CDC (7h) |
+| Pra sobreviver | 22h: comida 1h×7 (uma por dia), mercado 2h, faxina 3h, roupa 2h, marmita 2h, contas 2h, fazer nada 2h×2 | Casa ancorada no IBGE; divisão e "4h de fazer nada" são escolhas do jogo |
+| Pra viver | 11 sugestões, 41h; catálogo com 32 itens e itens próprios de 1h a 8h | Durações sugeridas pelo jogo |
+| Relógio | 3 minutos na 6×1; a 5×2 não tem relógio | Desenho de jogo |
+| Livre | 58h na 6×1 e 64h na 5×2; tirando o básico, 36h e 42h | Conta das premissas |
+| Máximo possível | Lista inicial: 10 de 11 na 6×1, 11 de 11 na 5×2 | `maxPlans`, testado |
 
-Mudam ao mesmo tempo os dias de trabalho e a carga semanal; o jogo não separa os dois efeitos. Também não simula salário, renda, emprego ou produtividade.
+O jogo não simula salário, renda, emprego ou produtividade. Escolha de profissão e dinheiro ficaram para uma segunda versão.
 
 ## Por que na 6×1 nem tudo cabe
 
-- São 6h a menos por semana (4h de trabalho e 2h de ônibus).
-- Cada dia de 8h ocupa 11h com transporte e almoço. Sobram no máximo 5h seguidas nesse dia, e a CLT não deixa juntar o trabalho num bloco só.
-- Só existe um dia inteiro livre. Programas longos (praia, churrasco, almoço em família) disputam esse dia.
+- São 6h a menos por semana (4h de trabalho e 2h de transporte).
+- Cada dia de 8h ocupa 11h com transporte e almoço. Sobram no máximo 5h seguidas à noite, e a CLT não deixa juntar o trabalho num bloco só.
+- Só existe um dia inteiro livre. Programas longos (praia, churrasco, almoço em família) disputam o domingo.
+- Em dia de trabalho, a 5×2 não dá mais tempo em casa (o expediente é igual). O ganho está no segundo dia de folga.

@@ -1,5 +1,17 @@
 # Histórico
 
+## 5.0.0 — 8/10/2026
+
+Simulador de vida dentro de uma agenda.
+
+- **Cai direto na agenda** da semana de 19 a 25 de outubro, no estilo de um calendário de celular, com o domingo da eleição marcado. Trabalho de segunda a sábado (8h–12h e 13h–17h; sábado até o meio-dia), domingo livre. Relógio de 3 minutos.
+- **Blocos independentes:** transporte de 1h ou 2h em cada trecho (num dia ou em todos), almoço de 1h ou 2h e em outro horário, hora extra até 2h. A CLT barra mais de 6h seguidas.
+- **Duas listas:** "pra sobreviver" (comida uma vez por dia, mercado, faxina, roupa, marmita, contas e 4h de fazer nada) vem primeiro; "pra viver" (11 sugestões, catálogo e itens próprios) só abre depois.
+- **Não tem como vencer:** na 6×1 cabem no máximo 10 de 11 coisas pra viver. O game over diz o que faltou (o básico, o descanso ou a vida), traz o relato de quem vive a 6×1 (Agência Brasil, Agência Mural, UOL, TVT), vídeos de Rick Azevedo e Erika Hilton e o que Flávio disse sobre o fim da 6×1, com fontes. Os botões ficam sempre à vista.
+- **"Experimentar a escala 5×2" ou "Tentar de novo".** Sai a pergunta "você é a favor da escala 6×1?". **O jogo não fala do Lula:** a 5×2 é "vida além do trabalho".
+- **Números com fonte** no "Como funciona": jornada (DIEESE), transporte (Censo 2022, Nossa São Paulo), afazeres (IBGE), sono (CDC), alcance da PEC (só carteira assinada).
+- Save novo (`folga-v7`): o progresso das versões anteriores não é aproveitado.
+
 ## 4.1.0 — 8/10/2026
 
 - Sai a pergunta do candidato. Como no FLÁVIO, quem abre o link cai direto na semana 6×1, com uma janela curta de "como jogar" na primeira visita; o relógio só anda depois que ela fecha. "Jogar de novo" começa outra semana 6×1.
