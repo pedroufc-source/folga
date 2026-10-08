@@ -385,7 +385,7 @@
     document.body.dataset.round = String(state.round);
     $('week-scale').textContent = sc.scale;
     $('week-step').textContent = `Com ${who(state.round)}`;
-    $('band-icon-use').setAttribute('href', state.round ? '#star' : '#sun');
+    $('band-icon-use').setAttribute('href', state.round ? '#star' : '#arminha');
     $('week-sub').textContent = `${sc.work.length} dias de trabalho · ${sc.workHours}h`;
     $('score').textContent = String(st.count);
     $('score-total').textContent = `/${N()}`;
