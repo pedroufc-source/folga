@@ -1,0 +1,5 @@
+{
+  "name": "folga", "version": "1.1.0", "private": true,
+  "description": "Um jogo de calendário sobre trabalho e tempo livre.",
+  "scripts": { "start": "python3 -m http.server 8781 --bind 127.0.0.1", "test": "node --test tests/engine.test.cjs", "test:ui": "node tests/ui.cjs" }
+}

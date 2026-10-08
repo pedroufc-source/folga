@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f7f5ed">
+  <meta name="description" content="A vida cabe na sua semana? Um pequeno jogo sobre trabalho, tempo e os planos que ficam para depois.">
+  <title>FOLGA — A vida cabe na sua semana?</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script src="engine.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <button class="wordmark" id="home-button" aria-label="Folga: voltar à apresentação">folga<span>✳</span></button>
+    <span class="header-note">um jogo sobre ter tempo</span>
+    <button class="text-button" id="about-button">Como funciona <span aria-hidden="true">↗</span></button>
+  </header>
+  <main>
+    <section id="intro" class="intro">
+      <div class="intro-copy">
+        <p class="eyebrow">UM PEQUENO QUEBRA-CABEÇA DA VIDA</p>
+        <h1>A vida cabe<br>na sua <em>semana?</em></h1>
+        <p class="intro-description">Trabalhar. Dormir. Pegar o ônibus.<br>E os planos que ficam para depois?</p>
+        <p class="intro-detail">Encaixe oito atividades em uma semana de 44h de trabalho. Depois, tente de novo com 40h e um dia a mais de folga.</p>
+        <button class="primary" id="start-button">Vamos encontrar tempo <span aria-hidden="true">↗</span></button>
+        <p class="small-note">Duas semanas para experimentar. No seu ritmo.</p>
+        <p class="small-note" id="schedule-update" hidden>Os horários foram atualizados para 44h e 40h. Comece uma nova partida para experimentar essa comparação. A partida da versão anterior permanece guardada separadamente.</p>
+        <button class="text-button" id="fresh-button" hidden>Começar uma nova partida</button>
+      </div>
+      <div class="intro-art" aria-label="Ilustração de duas semanas: a primeira tem seis dias trabalhados; a segunda, cinco.">
+        <div class="paper-week paper-first">
+          <div class="paper-top"><span>01 / UMA FOLGA</span><strong>6×1</strong></div>
+          <div class="mini-week"><i>S</i><i>T</i><i>Q</i><i>Q</i><i>S</i><i>S</i><i>D</i><b></b><b></b><b></b><b></b><b></b><b></b><b class="mini-free">☼</b></div>
+          <p>5 dias × 8h + sábado de 4h = 44h</p>
+        </div>
+        <div class="paper-week paper-second">
+          <div class="paper-top"><span>02 / DUAS FOLGAS</span><strong>5×2</strong></div>
+          <div class="mini-week"><i>S</i><i>T</i><i>Q</i><i>Q</i><i>S</i><i>S</i><i>D</i><b></b><b></b><b></b><b></b><b></b><b class="mini-free">✳</b><b class="mini-free">☼</b></div>
+          <p>5 dias × 8h de trabalho = 40h</p>
+        </div>
+        <div class="art-caption"><span class="hand-arrow">↳</span> o que você faria<br>com esse tempo?</div>
+      </div>
+      <div class="intro-bottom"><span>01 <b>Escolha um plano</b></span><span>02 <b>Encontre um horário</b></span><span>03 <b>Compare as semanas</b></span></div>
+      <p class="premise-note">Cenários fictícios, com horários definidos pelo jogo. Aqui mudam os dias trabalhados <strong>e</strong> as horas semanais. <button class="inline-button" data-about>Veja as premissas.</button></p>
+    </section>
+
+    <section id="game" hidden>
+      <div class="game-heading">
+        <div><p class="eyebrow" id="round-label"></p><h1 id="week-title" tabindex="-1"></h1><p id="week-subtitle"></p></div>
+        <div class="score-box"><strong id="progress-count">0<span>/8</span></strong><span>planos na semana</span></div>
+      </div>
+      <nav class="mobile-views" aria-label="Visualização do jogo"><button id="show-plans" aria-pressed="true">Encaixar planos</button><button id="show-calendar" aria-pressed="false">Ver calendário</button></nav>
+      <div class="game-layout">
+        <section class="calendar-panel" aria-label="Calendário da semana">
+          <div class="calendar-top"><span class="calendar-label">SEU TEMPO, DIA A DIA</span><button class="text-button" id="undo-button" disabled>↶ Desfazer</button></div>
+          <div id="day-tabs" class="day-tabs" aria-label="Escolher dia"></div>
+          <div id="canvas-wrap"><canvas id="week-canvas" tabindex="0" aria-label="Calendário. Use os botões de atividades e horários abaixo como alternativa ao arraste."></canvas></div>
+          <div class="legend"><span><i class="swatch work"></i>Trabalho</span><span><i class="swatch commute"></i>Trajeto</span><span><i class="swatch routine"></i>Rotina</span><span><i class="swatch open"></i>Disponível</span></div>
+          <div class="sleep-note"><span aria-hidden="true">☾</span><span><b>23h–7h: sono preservado.</b> Refeições e cuidados da casa também têm lugar reservado.</span></div>
+          <details class="accessible-agenda"><summary>Ver agenda em texto</summary><div id="agenda-text"></div></details>
+        </section>
+        <aside class="plans-panel" aria-labelledby="plans-title">
+          <div class="plans-heading"><div><p class="eyebrow">O QUE VOCÊ QUER FAZER?</p><h2 id="plans-title">Seus planos</h2></div><span class="plans-arrow" aria-hidden="true">↙</span></div>
+          <p class="plan-hint">Toque em um plano para escolher o horário.<span class="desktop-drag-hint"> Ou arraste pela alça <span aria-hidden="true">⠿</span>.</span></p>
+          <div id="tasks" class="tasks"></div>
+          <div id="placement-picker" class="placement-picker" hidden></div>
+          <p id="status" class="status" role="status" aria-live="polite">Por onde você quer começar?</p>
+          <button class="primary full" id="finish-button">Fechar esta semana <span aria-hidden="true">→</span></button>
+          <p class="small-note centered">Você decide quando terminar. Não precisa preencher tudo.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="intermission" class="summary-view" hidden>
+      <p class="eyebrow">PRIMEIRA SEMANA CONCLUÍDA</p>
+      <h1>O que coube.<br><em>O que ficou para depois.</em></h1>
+      <div id="first-result"></div>
+      <div class="next-week-note"><span aria-hidden="true">↳</span><p>Agora, os mesmos planos e o mesmo imprevisto.<br><b>O sábado também fica livre do trabalho.</b></p></div>
+      <button class="primary" id="next-button">Experimentar a segunda semana <span aria-hidden="true">→</span></button>
+      <p class="small-note">Nesta rodada: 40h de trabalho e 10h de trajeto por semana.</p>
+    </section>
+
+    <section id="results" class="summary-view" hidden>
+      <p class="eyebrow">DUAS SEMANAS. OS MESMOS PLANOS.</p>
+      <h1>Tempo para <em>viver.</em></h1>
+      <p class="results-lead" id="results-lead"></p>
+      <div id="comparison" class="comparison"></div>
+      <div class="time-explanation"><span class="time-number" id="time-gain"></span><div><h2>Disponíveis para distribuir</h2><p id="time-gain-description"></p></div></div>
+      <div id="plan-comparison"></div>
+      <details class="premises-result"><summary>Conferir as horas e as premissas</summary><div id="hours-table"></div><p>Esta é uma comparação entre duas semanas fictícias, com janelas de atividade definidas pelo jogo. Mudar de escala e reduzir horas semanais são decisões distintas; aqui, as duas coisas mudam. Salário, renda e produtividade não são simulados. Os resultados dependem também das suas escolhas de encaixe.</p></details>
+      <div class="result-actions"><button class="primary" id="share-button">Compartilhar meu resultado <span aria-hidden="true">↗</span></button><button class="secondary" id="replay-button">Jogar de novo</button></div>
+      <p class="results-question">E você, o que faria com mais tempo livre?</p>
+    </section>
+  </main>
+  <footer><span>folga ✳</span><p>Um experimento jogável sobre a semana.<br>Sem cadastro. Seu progresso fica neste navegador.</p><button class="text-button" data-about>Premissas do jogo ↗</button></footer>
+
+  <dialog id="about-dialog" aria-labelledby="about-title">
+    <button class="close-button" data-close aria-label="Fechar">×</button><p class="eyebrow">ANTES DE ENCAIXAR A VIDA</p><h2 id="about-title">Como funciona</h2>
+    <ol class="instructions"><li><b>Escolha um plano.</b> Cada um tem duração e dias possíveis.</li><li><b>Encontre um espaço.</b> Toque em um horário disponível ou arraste o plano para o calendário. Para mover, escolha o plano outra vez.</li><li><b>Experimente as duas semanas.</b> Feche a primeira e reorganize os mesmos planos com outro dia de folga.</li></ol>
+    <h3>Os números deste jogo</h3><p>Semana 1: 44h, com 8h de segunda a sexta e 4h no sábado. Semana 2: 40h, com 8h de segunda a sexta e duas folgas.</p><p>De segunda a sexta, o trabalho ocupa 9h–12h e 13h–18h. O almoço, das 12h às 13h, fica fora das 8h trabalhadas. O trajeto ocupa 8h–9h e 18h–19h. Na primeira semana, o sábado tem trabalho das 9h às 13h e trajeto das 8h às 9h e das 13h às 14h.</p><p>Todos os dias: 8h de sono e 3h de rotina. De segunda a sexta, a rotina ocupa 7h–8h, 12h–13h e 19h–20h; no fim de semana, 7h–8h e 17h–19h. Um atraso na quarta adia a rotina da noite para 20h–21h. As oito atividades têm janelas fixas, iguais nas duas rodadas.</p>
+    <p class="small-note">Referências: limite geral de 44h na <a href="https://www4.planalto.gov.br/legislacao/legis-federal/constituicao" target="_blank" rel="noopener noreferrer">Constituição, art. 7º, XIII</a>; cenário de 40h e duas folgas na <a href="https://www.camara.leg.br/noticias/1277073-plenario-analisa-neste-momento-pec-que-acaba-com-escala-6x1-acompanhe" target="_blank" rel="noopener noreferrer">proposta descrita pela Câmara em 27/05/2026</a>. Os horários do calendário são escolhas do jogo.</p>
+    <p class="callout">São premissas de um quebra-cabeça, não médias da população nem previsão dos efeitos de uma lei. Aqui mudam tanto os dias trabalhados quanto a carga semanal. Não há simulação de renda, salário ou produtividade.</p>
+    <p class="small-note">Computador: selecione e clique, arraste, ou use Tab e Enter nos botões. F ativa tela cheia; Esc fecha janelas. Celular: escolha o plano, o dia e o horário.</p>
+    <button class="primary full" data-close>Entendi, vamos lá</button>
+  </dialog>
+  <dialog id="event-dialog" aria-labelledby="event-title"><p class="eyebrow">A VIDA TAMBÉM ACONTECE</p><div class="event-symbol" aria-hidden="true">↝</div><h2 id="event-title">O ônibus atrasou.</h2><p>Na quarta, você chega às 20h, uma hora mais tarde. A rotina da casa passa para 20h–21h. Com isso, o espaço das <b>20h às 21h</b> deixa de ficar disponível.</p><p id="event-impact"></p><p class="small-note">O mesmo imprevisto acontece nas duas semanas.</p><button class="primary full" id="event-ok">Reorganizar a semana →</button></dialog>
+  <dialog id="finish-dialog" aria-labelledby="finish-title"><button class="close-button" data-close aria-label="Fechar">×</button><p class="eyebrow">PODE FICAR ASSIM?</p><h2 id="finish-title">Fechar esta semana?</h2><p id="finish-detail"></p><div class="dialog-actions"><button class="secondary" data-close>Continuar encaixando</button><button class="primary" id="confirm-finish">Fechar semana →</button></div></dialog>
+  <dialog id="restart-dialog" aria-labelledby="restart-title"><button class="close-button" data-close aria-label="Fechar">×</button><h2 id="restart-title">Começar outra partida?</h2><p>Os encaixes atuais serão apagados deste navegador.</p><div class="dialog-actions"><button class="secondary" data-close>Voltar</button><button class="primary" id="confirm-restart">Começar de novo</button></div></dialog>
+  <dialog id="share-dialog" aria-labelledby="share-title"><button class="close-button" data-close aria-label="Fechar">×</button><p class="eyebrow">UMA SEMANA EM POUCAS LINHAS</p><h2 id="share-title">Leve essa conversa adiante.</h2><label for="share-text">Seu resultado</label><textarea id="share-text" rows="9" readonly></textarea><button class="primary full" id="copy-button">Copiar resultado</button><p class="small-note" id="copy-status" role="status"></p></dialog>
+  <div id="drag-ghost" hidden aria-hidden="true"></div>
+</body>
+</html>
